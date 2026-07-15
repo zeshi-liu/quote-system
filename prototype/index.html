@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>中药饮品报价系统 - 中保真原型</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="login" class="login-screen">
+      <section class="login-panel">
+        <div class="brand-mark">中</div>
+        <h1>中药饮品报价系统</h1>
+        <p>销售员内部报价工作台</p>
+        <label>
+          登录账号 / 手机号
+          <input id="loginAccount" value="sales01" />
+        </label>
+        <label>
+          密码
+          <input id="loginPassword" type="password" value="123456" />
+        </label>
+        <button class="primary full" data-action="login">登录</button>
+        <div class="login-note">原型账号可直接登录，模拟销售员角色。</div>
+      </section>
+    </div>
+
+    <div id="app" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <span class="brand-mark small">中</span>
+          <div>
+            <strong>报价系统</strong>
+            <small>A 方案 MVP</small>
+          </div>
+        </div>
+        <nav class="nav-list">
+          <button class="nav-item active" data-screen="dashboard">工作台</button>
+          <button class="nav-item" data-screen="purchase">采购单</button>
+          <button class="nav-item" data-screen="quotes">报价单</button>
+          <button class="nav-item" data-screen="manufacturer">厂家报价库</button>
+          <button class="nav-item" data-screen="hospitals">医院客户</button>
+          <button class="nav-item" data-screen="masters">基础资料</button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="search-box">搜索医院、采购单号、报价单号、品名</div>
+          <div class="top-actions">
+            <button class="primary" data-screen="purchase">新建采购单</button>
+            <button class="secondary" data-screen="workbench">继续编辑报价</button>
+            <button class="ghost" data-screen="manufacturer">上传/录入厂家报价</button>
+            <div class="user-chip">王销售 · 销售员</div>
+          </div>
+        </header>
+
+        <section id="screen-dashboard" class="screen active">
+          <div class="page-head">
+            <div>
+              <h2>工作台</h2>
+              <p>优先处理采购单录入、校对和报价，不把厂家报价导入作为每日前置动作。</p>
+            </div>
+            <div class="head-actions">
+              <button class="primary" data-screen="purchase">新建采购单</button>
+              <button class="secondary" data-screen="purchase">继续处理采购单</button>
+              <button class="secondary" data-screen="workbench">继续编辑报价</button>
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <article class="metric">
+              <span>今日采购单</span>
+              <strong>8</strong>
+              <small>3 单待校对</small>
+            </article>
+            <article class="metric">
+              <span>草稿报价</span>
+              <strong>5</strong>
+              <small>2 单待导出</small>
+            </article>
+            <article class="metric warning">
+              <span>需修改报价</span>
+              <strong>2</strong>
+              <small>医院反馈待处理</small>
+            </article>
+            <article class="metric ok">
+              <span>报价库状态</span>
+              <strong>正常</strong>
+              <small>最新批次 2026-07-04 09:00</small>
+            </article>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel">
+              <div class="panel-title">
+                <h3>待处理事项</h3>
+                <button class="text-btn" data-screen="purchase">查看全部</button>
+              </div>
+              <div class="task-list">
+                <button class="task-row" data-screen="purchase">
+                  <span class="status-dot amber"></span>
+                  <div>
+                    <strong>XX 中医院采购单待校对</strong>
+                    <small>图片识别 18 行，2 行低置信度</small>
+                  </div>
+                  <span>处理</span>
+                </button>
+                <button class="task-row" data-screen="workbench">
+                  <span class="status-dot red"></span>
+                  <div>
+                    <strong>YY 人民医院报价单需修改</strong>
+                    <small>医院反馈党参、黄芪价格偏高</small>
+                  </div>
+                  <span>创建 V2</span>
+                </button>
+                <button class="task-row" data-screen="workbench">
+                  <span class="status-dot blue"></span>
+                  <div>
+                    <strong>草稿报价单待导出</strong>
+                    <small>BJ-20260704-HOSP01-001</small>
+                  </div>
+                  <span>继续</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title">
+                <h3>高频操作</h3>
+              </div>
+              <div class="quick-grid">
+                <button class="quick-action primary-light" data-screen="purchase">
+                  <span>+</span>
+                  新建采购单
+                </button>
+                <button class="quick-action" data-screen="purchase">
+                  <span>✓</span>
+                  继续校对采购单
+                </button>
+                <button class="quick-action" data-screen="workbench">
+                  <span>¥</span>
+                  继续编辑报价
+                </button>
+                <button class="quick-action" data-screen="manufacturer">
+                  <span>↥</span>
+                  维护厂家报价库
+                </button>
+              </div>
+              <div class="notice info">
+                无厂家报价时仍可录入采购单；报价工作台会提示“无厂家价”，销售员可手工报价或补充报价库。
+              </div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-title">
+              <h3>厂家报价库维护</h3>
+              <button class="secondary" data-screen="manufacturer">录入新批次</button>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>批次号</th>
+                  <th>厂家</th>
+                  <th>批次日期</th>
+                  <th>生效时间</th>
+                  <th>来源</th>
+                  <th>状态</th>
+                  <th>有效/异常</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>FQ-20260704-MFR001-001</td>
+                  <td>厂家 A</td>
+                  <td>2026-07-04</td>
+                  <td>09:00</td>
+                  <td>文件导入</td>
+                  <td><span class="badge ok">有效</span></td>
+                  <td>9820 / 80</td>
+                  <td><button class="text-btn" data-screen="manufacturer">查看</button></td>
+                </tr>
+                <tr>
+                  <td>FQ-20260703-MFR002-001</td>
+                  <td>厂家 B</td>
+                  <td>2026-07-03</td>
+                  <td>18:30</td>
+                  <td>手动录入</td>
+                  <td><span class="badge ok">有效</span></td>
+                  <td>520 / 4</td>
+                  <td><button class="text-btn" data-screen="manufacturer">查看</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+        </section>
+
+        <section id="screen-manufacturer" class="screen">
+          <div class="page-head">
+            <div>
+              <h2>厂家报价库</h2>
+              <p>每次确认入库都创建新批次，历史批次保留追溯，不覆盖旧批次。</p>
+            </div>
+            <button class="primary" data-action="restartManufacturerWizard">录入新批次</button>
+          </div>
+
+          <section class="panel">
+            <div class="panel-title">
+              <h3>报价录入向导</h3>
+              <div class="steps">
+                <span class="step active" data-step-label="1">基本信息</span>
+                <span class="step" data-step-label="2">录入报价</span>
+                <span class="step" data-step-label="3">预览校验</span>
+                <span class="step" data-step-label="4">完成</span>
+              </div>
+            </div>
+
+            <div class="wizard-step active" data-step="1">
+              <div class="form-grid">
+                <label>厂家<select><option>厂家 A</option><option>厂家 B</option></select></label>
+                <label>批次日期<input value="2026-07-04" /></label>
+                <label>生效时间<input value="2026-07-04 09:00" /></label>
+              </div>
+              <div class="segmented" role="group">
+                <button class="selected" data-mode="file">文件导入</button>
+                <button data-mode="manual">手动录入</button>
+              </div>
+              <div class="notice info">选择手动录入时，可逐行录入或从 Excel 复制多行粘贴。</div>
+              <div class="footer-actions">
+                <button class="primary" data-action="wizardNext">下一步：录入报价</button>
+              </div>
+            </div>
+
+            <div class="wizard-step" data-step="2">
+              <div class="mode-block file-mode">
+                <div class="upload-box">
+                  <strong>拖拽或点击上传报价单.xlsx</strong>
+                  <span>支持 xlsx / xls / csv，文件不超过 20MB</span>
+                </div>
+                <table>
+                  <thead>
+                    <tr><th>系统字段</th><th>Excel 列</th><th>必填</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>厂家原始品名</td><td><select><option>品名</option></select></td><td>是</td></tr>
+                    <tr><td>单位</td><td><select><option>单位</option></select></td><td>是</td></tr>
+                    <tr><td>含税单价</td><td><select><option>含税价</option></select></td><td>是</td></tr>
+                    <tr><td>用于比价厂家价</td><td><select><option>含税含抽点价</option></select></td><td>是</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="mode-block manual-mode hidden">
+                <div class="table-toolbar">
+                  <button class="secondary" data-action="addManufacturerRow">新增行</button>
+                  <button class="secondary" data-action="pasteManufacturerRows">批量粘贴</button>
+                  <button class="ghost">复制选中行</button>
+                  <button class="ghost">删除选中行</button>
+                </div>
+                <table id="manualQuoteTable">
+                  <thead>
+                    <tr>
+                      <th>原始品名</th><th>标准品名</th><th>规格</th><th>单位</th><th>含税单价</th><th>含抽点价</th><th>用于比价价</th><th>备注</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div class="footer-actions">
+                <button class="secondary" data-action="wizardPrev">上一步</button>
+                <button class="primary" data-action="wizardNext">生成录入预览</button>
+              </div>
+            </div>
+
+            <div class="wizard-step" data-step="3">
+              <div class="metric-grid compact">
+                <article class="metric"><span>总行数</span><strong>18</strong></article>
+                <article class="metric ok"><span>有效</span><strong>15</strong></article>
+                <article class="metric warning"><span>异常</span><strong>2</strong></article>
+                <article class="metric warning"><span>未匹配</span><strong>1</strong></article>
+              </div>
+              <table>
+                <thead>
+                  <tr><th>行号</th><th>原始品名</th><th>匹配品类</th><th>单位</th><th>厂家价</th><th>状态</th><th>原因/操作</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>1</td><td>党参</td><td>党参</td><td>kg</td><td>11.80</td><td><span class="badge ok">有效</span></td><td>-</td></tr>
+                  <tr><td>2</td><td>炙甘草片</td><td>未匹配</td><td>kg</td><td>8.30</td><td><span class="badge danger">未匹配</span></td><td><button class="text-btn">绑定品类</button></td></tr>
+                  <tr><td>3</td><td>黄芪</td><td>黄芪</td><td>kg</td><td>-</td><td><span class="badge danger">异常</span></td><td>价格为空</td></tr>
+                </tbody>
+              </table>
+              <div class="notice warning">确认入库会创建新批次，历史所有批次保留，不覆盖旧批次。</div>
+              <div class="footer-actions">
+                <button class="secondary" data-action="wizardPrev">上一步</button>
+                <button class="primary" data-action="showBatchConfirm">确认入库并创建新批次</button>
+              </div>
+            </div>
+
+            <div class="wizard-step" data-step="4">
+              <div class="success-state">
+                <strong>新报价批次已创建</strong>
+                <p>FQ-20260704-MFR001-002 · 文件导入/手动录入 · 历史批次保留追溯</p>
+                <button class="secondary" data-action="restartManufacturerWizard">继续录入新批次</button>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section id="screen-purchase" class="screen">
+          <div class="page-head">
+            <div>
+              <h2>采购单编辑</h2>
+              <p>上传、导入或手工录入医院采购明细，必须校对后才能创建报价单。</p>
+            </div>
+            <div class="head-actions">
+              <button class="secondary" data-action="savePurchase">保存草稿</button>
+              <button class="secondary" data-action="confirmPurchase">确认采购单</button>
+              <button class="primary" data-action="createQuoteFromPurchase">创建报价单</button>
+            </div>
+          </div>
+
+          <div class="purchase-layout">
+            <section class="panel file-preview">
+              <h3>原始采购单</h3>
+              <div class="mock-document">
+                <strong>XX 中医院采购单</strong>
+                <span>党参 10kg</span>
+                <span>炙甘草片 5kg</span>
+                <span>黄芪 8kg</span>
+                <span>陈皮 数量待确认</span>
+              </div>
+              <div class="notice warning">OCR 识别完成：2 个字段低置信度，需人工确认。</div>
+            </section>
+
+            <section class="panel flex-panel">
+              <div class="panel-title">
+                <h3>采购明细</h3>
+                <span id="purchaseStatus" class="badge warning">草稿</span>
+              </div>
+              <div class="form-grid compact-fields">
+                <label>医院<select><option>XX 中医院</option><option>YY 人民医院</option></select></label>
+                <label>采购日期<input value="2026-07-04" /></label>
+                <label>来源<select><option>图片 OCR</option><option>Excel 导入</option><option>手工录入</option></select></label>
+              </div>
+              <div class="table-toolbar">
+                <button class="secondary" data-action="addPurchaseRow">新增行</button>
+                <button class="secondary">复制行</button>
+                <button class="ghost">批量匹配</button>
+              </div>
+              <table id="purchaseTable">
+                <thead>
+                  <tr>
+                    <th>原始品名</th><th>标准品名</th><th>规格</th><th>数量</th><th>单位</th><th>OCR</th><th>匹配</th><th>操作</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </section>
+          </div>
+        </section>
+
+        <section id="screen-quotes" class="screen">
+          <div class="page-head">
+            <div>
+              <h2>报价单</h2>
+              <p>查看报价状态、风险数、版本和操作入口。</p>
+            </div>
+          </div>
+          <section class="panel">
+            <table>
+              <thead>
+                <tr><th>报价单号</th><th>医院</th><th>版本</th><th>状态</th><th>金额</th><th>风险</th><th>操作</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>BJ-20260704-HOSP01-001</td><td>XX 中医院</td><td>V1</td><td><span id="quoteListStatus" class="badge warning">草稿</span></td><td>¥ 6,420.00</td><td><span class="badge danger">5</span></td>
+                  <td><button class="text-btn" data-screen="workbench">继续编辑</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+        </section>
+
+        <section id="screen-workbench" class="screen">
+          <div class="page-head sticky-head">
+            <div>
+              <h2>报价工作台</h2>
+              <p><span>XX 中医院</span> · <span>BJ-20260704-HOSP01-001</span> · <span id="versionLabel">V1</span> · <span id="quoteStatus" class="badge warning">草稿</span></p>
+            </div>
+            <div class="head-actions">
+              <button class="secondary" data-action="saveQuote">保存草稿</button>
+              <button class="secondary" data-action="showBulkMarkup">批量加价</button>
+              <button class="secondary" data-screen="preview">预览报价单</button>
+              <button class="primary" data-action="showExportRisk">导出 Excel</button>
+            </div>
+          </div>
+
+          <section class="risk-bar">
+            <span>风险汇总</span>
+            <strong id="riskSummary">未匹配 1 / 无厂家价 1 / 低于基准价 1 / 数量为空 1</strong>
+            <button class="text-btn" data-action="resolveUnmatched">模拟处理未匹配</button>
+          </section>
+
+          <div class="workbench-layout">
+            <section class="panel table-panel">
+              <div class="table-toolbar">
+                <label>范围<select><option>全部可报价行</option><option>当前筛选行</option><option>已选中行</option></select></label>
+                <label>加价方式<select><option>按比例</option><option>固定金额</option><option>目标毛利率</option></select></label>
+                <label>参数<input id="markupInput" value="10%" /></label>
+                <button class="secondary" data-action="showBulkMarkup">预览影响</button>
+                <button class="ghost hidden" id="undoBulk" data-action="undoBulk">撤销本次批量操作</button>
+              </div>
+              <table id="quoteTable" class="dense-table">
+                <thead>
+                  <tr>
+                    <th>风险</th><th>原始品名</th><th>标准品名</th><th>数量</th><th>单位</th><th>厂家A</th><th>厂家B</th><th>最新最低</th><th>历史最低</th><th>医院上次</th><th>建议基准</th><th>本次报价</th><th>加价率</th><th>操作</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </section>
+
+            <aside class="reference-panel">
+              <div class="tabs">
+                <button class="selected" data-ref-tab="factory">厂家报价</button>
+                <button data-ref-tab="history">医院历史</button>
+                <button data-ref-tab="log">改价记录</button>
+                <button data-ref-tab="match">匹配信息</button>
+              </div>
+              <div id="referenceContent" class="reference-content"></div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="screen-preview" class="screen">
+          <div class="page-head">
+            <div>
+              <h2>报价单预览</h2>
+              <p>正式导出前检查报价单样式、风险和版本状态。</p>
+            </div>
+            <div class="head-actions">
+              <button class="secondary" data-screen="workbench">返回编辑</button>
+              <button class="primary" data-action="showExportRisk">导出 Excel</button>
+              <button class="secondary" data-action="markSent">标记已发送</button>
+              <button class="secondary" data-action="markConfirmed">标记已确认</button>
+              <button class="ghost" data-action="showNewVersion">创建新版本</button>
+            </div>
+          </div>
+          <div class="preview-layout">
+            <section class="quote-paper">
+              <h3>XX 中医院中药饮品报价单</h3>
+              <div class="paper-meta">
+                <span>报价单号：BJ-20260704-HOSP01-001</span>
+                <span>报价日期：2026-07-04</span>
+                <span>销售员：王销售 138****0000</span>
+              </div>
+              <table id="previewTable">
+                <thead><tr><th>序号</th><th>品名</th><th>规格</th><th>数量</th><th>单位</th><th>单价</th><th>金额</th><th>备注</th></tr></thead>
+                <tbody></tbody>
+              </table>
+              <p class="paper-note">备注：本报价单以最终确认版本为准，价格含税含抽点。</p>
+            </section>
+            <aside class="panel">
+              <h3>版本与风险</h3>
+              <dl class="info-list">
+                <dt>当前版本</dt><dd id="previewVersion">V1</dd>
+                <dt>状态</dt><dd id="previewStatus">草稿</dd>
+                <dt>导出记录</dt><dd id="exportRecord">暂无导出</dd>
+                <dt>风险</dt><dd id="previewRisk">未匹配 1 / 无厂家价 1</dd>
+              </dl>
+            </aside>
+          </div>
+        </section>
+
+        <section id="screen-hospitals" class="screen">
+          <div class="page-head"><div><h2>医院客户</h2><p>中保真原型中仅保留列表入口。</p></div></div>
+          <section class="panel"><table><thead><tr><th>医院</th><th>采购员</th><th>负责销售</th><th>历史报价</th></tr></thead><tbody><tr><td>XX 中医院</td><td>李主任</td><td>王销售</td><td>18 次</td></tr><tr><td>YY 人民医院</td><td>陈老师</td><td>王销售</td><td>9 次</td></tr></tbody></table></section>
+        </section>
+
+        <section id="screen-masters" class="screen">
+          <div class="page-head"><div><h2>基础资料</h2><p>厂家、品类、别名库在原型中作为支撑入口展示。</p></div></div>
+          <section class="panel"><div class="empty-state">基础资料 CRUD 暂不展开，后续设计可按 PRD 继续细化。</div></section>
+        </section>
+      </main>
+    </div>
+
+    <div id="modal" class="modal-layer hidden">
+      <div class="modal">
+        <button class="modal-close" data-action="closeModal">×</button>
+        <div id="modalContent"></div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
