@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>报价系统 v3 · 销售待办工作台</title>
+  <style>
+    :root { --ink:#1e2925; --muted:#758078; --line:#e4e9e5; --green:#216349; --soft:#eaf2ed; --canvas:#f6f8f5; --red:#a34c3e; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; color:var(--ink); background:#eef1ed; }
+    button, input { font:inherit; } button { cursor:pointer; } button:focus-visible, a:focus-visible { outline:3px solid #72a790; outline-offset:3px; }
+    .review { padding:25px 40px 20px; background:#fff; border-bottom:1px solid #dce3dc; }
+    .eyebrow { color:var(--green); font-size:11px; font-weight:650; letter-spacing:1.5px; }
+    .review-line { display:flex; justify-content:space-between; gap:30px; align-items:start; }
+    h1 { font-size:23px; margin:5px 0; font-weight:650; letter-spacing:-.7px; }
+    .review p { margin:4px 0 18px; color:var(--muted); font-size:13px; }
+    .stage-label { font-size:12px; color:var(--muted); padding-top:8px; white-space:nowrap; }
+    .options { display:flex; gap:12px; }
+    .option { display:flex; gap:12px; text-align:left; border:1px solid #dce3dc; border-radius:7px; padding:12px 16px; background:white; min-width:310px; color:var(--ink); transition:background .15s,border-color .15s; }
+    .option:hover { border-color:#7d9c88; } .option.selected { border-color:var(--green); background:var(--soft); }
+    .letter { width:25px; height:25px; flex-shrink:0; display:grid; place-items:center; border:1px solid #ccd8ce; border-radius:50%; color:var(--green); font-size:12px; }
+    .option h3 { margin:0 0 2px; font-size:13px; font-weight:650; } .option small { display:block; font-size:12px; color:var(--muted); }
+    .preview-label { margin:18px 40px 10px; display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
+    .preview-label strong { color:var(--ink); font-weight:500; }
+    .app { display:grid; grid-template-columns:190px minmax(0,1fr); min-height:710px; margin:0 40px; border:1px solid #dce3dc; background:var(--canvas); border-radius:9px; overflow:hidden; box-shadow:0 10px 36px #17352507; }
+    aside { background:#fff; border-right:1px solid var(--line); display:flex; flex-direction:column; padding:26px 17px 18px; }
+    .brand { font-size:17px; font-weight:650; letter-spacing:-.5px; padding:0 10px 25px; } .brand-mark { display:inline-grid; place-items:center; width:26px; height:26px; background:var(--green); color:white; border-radius:7px; margin-right:8px; font-size:15px; }
+    .nav-title { margin:15px 12px 7px; color:#929b94; font-size:10px; letter-spacing:1px; }
+    .nav-item { padding:10px 12px; font-size:13px; color:#606d64; border-radius:5px; margin-bottom:3px; display:flex; align-items:center; gap:10px; }
+    .nav-item.active { background:var(--soft); color:var(--green); font-weight:600; } .nav-item svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.5; flex-shrink:0; }
+    .nav-end { margin-top:auto; padding:18px 10px 0; border-top:1px solid var(--line); color:var(--muted); font-size:11px; } .nav-end strong { color:var(--ink); font-size:12px; font-weight:500; }
+    .workspace { min-width:0; } .utility { height:54px; display:flex; align-items:center; justify-content:space-between; padding:0 30px; border-bottom:1px solid var(--line); background:#fff; font-size:11px; color:var(--muted); }
+    .utility-right { display:flex; gap:24px; align-items:center; } .new-dot { display:inline-block; width:5px; height:5px; background:var(--green); border-radius:50%; margin-right:5px; }
+    .avatar { background:#e9eee7; color:var(--green); border-radius:50%; display:inline-grid; place-items:center; width:25px; height:25px; margin-right:6px; }
+    main { padding:27px 30px; } .heading { display:flex; justify-content:space-between; align-items:center; gap:20px; }
+    h2 { margin:0 0 4px; font-size:25px; font-weight:600; letter-spacing:-.7px; } .sub { font-size:11px; color:var(--muted); } .mock-button { display:inline-flex; align-items:center; padding:9px 13px; font-size:11px; border:1px solid #d9e2d9; border-radius:5px; background:#fff; white-space:nowrap; } .primary { background:var(--green); color:white; border-color:var(--green); } .actions { display:flex; gap:8px; }
+    .summary { display:grid; grid-template-columns:repeat(6,1fr); margin:26px 0; padding:17px 0 19px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .metric { padding-left:18px; border-left:1px solid var(--line); } .metric:first-child { padding-left:0; border:0; } .metric-name { color:var(--muted); font-size:11px; white-space:nowrap; } .metric-value { font-size:25px; letter-spacing:-.6px; line-height:1.4; font-variant-numeric:tabular-nums; } .metric-value span { font-size:10px; margin-left:5px; color:var(--muted); }
+    .a-grid { display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:25px; } .section-title { display:flex; align-items:center; justify-content:space-between; margin-bottom:15px; } h3 { font-size:14px; font-weight:600; margin:0; } .small-link { font-size:11px; color:var(--green); }
+    .tabs { display:flex; align-items:center; gap:20px; padding-bottom:9px; border-bottom:1px solid var(--line); font-size:11px; color:var(--muted); }
+    .tab-active { color:var(--green); position:relative; font-weight:600; } .tab-active:after { position:absolute; content:""; height:2px; background:var(--green); left:0; right:0; bottom:-10px; }
+    .task { padding:18px 0; border-bottom:1px solid var(--line); } .task-top { display:flex; align-items:center; justify-content:space-between; gap:10px; } .hospital { font-size:13px; font-weight:500; } .meta { font-size:10px; color:var(--muted); margin-top:5px; } .task-bottom { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:12px; font-size:11px; color:var(--muted); }
+    .tag { font-size:10px; color:var(--green); background:#eaf2ed; padding:3px 7px; border-radius:3px; white-space:nowrap; } .tag-neutral { color:#788174; background:#ecefea; } .task-action { color:var(--green); font-size:11px; white-space:nowrap; }
+    .side { border-left:1px solid var(--line); padding-left:24px; } .balance-title { color:var(--muted); font-size:11px; } .balance { font-size:29px; letter-spacing:-.8px; font-variant-numeric:tabular-nums; margin:4px 0 3px; } .balance small { font-size:13px; margin-right:5px; }
+    .subtle { font-size:10px; color:var(--muted); } .receivable-stats { display:grid; grid-template-columns:1fr 1fr; gap:20px; padding:19px 0; border-bottom:1px solid var(--line); margin-bottom:7px; } .stat-detail { font-size:11px; color:var(--muted); margin-bottom:5px; } .stat-amount { font-size:16px; font-variant-numeric:tabular-nums; } .overdue { color:var(--red); }
+    .due-row { border-bottom:1px solid var(--line); padding:13px 0; } .due-top { display:flex; justify-content:space-between; font-size:11px; margin-bottom:5px; } .due-bottom { display:flex; justify-content:space-between; color:var(--muted); font-size:10px; } .due-label { color:var(--red); } .exception { margin-top:13px; font-size:10px; color:var(--muted); line-height:1.9; }
+    .workspace-foot { margin-top:22px; font-size:10px; color:#939d94; }
+    .b-summary { display:flex; gap:32px; padding:20px 0; margin-top:15px; border-bottom:1px solid var(--line); } .b-summary strong { font-weight:500; margin-left:8px; font-variant-numeric:tabular-nums; } .b-summary div { font-size:11px; color:var(--muted); }
+    .filter-row { display:flex; justify-content:space-between; gap:20px; align-items:center; margin:22px 0 16px; } .search { display:flex; align-items:center; color:#8a948c; background:#fff; border:1px solid #dfe5dd; border-radius:5px; padding:9px 12px; min-width:260px; font-size:11px; } .filter-chips { display:flex; align-items:center; gap:20px; font-size:11px; color:var(--muted); } .chip-active { color:var(--green); font-weight:600; }
+    .table-wrap { overflow-x:auto; } table { width:100%; border-collapse:collapse; text-align:left; min-width:690px; } th { font-size:10px; color:var(--muted); font-weight:400; background:#f0f3ef; padding:12px 10px; } td { font-size:11px; padding:19px 10px; border-bottom:1px solid var(--line); } td:first-child { padding-left:12px; } .order-name { color:var(--ink); font-size:12px; margin-bottom:4px; } .order-code { color:var(--muted); font-size:9px; } .money { font-variant-numeric:tabular-nums; white-space:nowrap; } .muted { color:var(--muted); } .table-footer { display:flex; justify-content:space-between; padding-top:15px; color:var(--muted); font-size:10px; }
+    .layout-panel[hidden] { display:none; } .layout-panel { animation:appear .2s ease-out; } @keyframes appear { from{ opacity:.45; transform:translateY(3px); } to{opacity:1; transform:translateY(0);} }
+    .review-note { display:flex; justify-content:space-between; gap:20px; margin:14px 40px 30px; font-size:12px; color:var(--muted); } .review-note strong { color:var(--green); font-weight:500; }
+    @media(max-width:1100px) { .app { grid-template-columns:160px minmax(0,1fr); margin:0 20px; } .review { padding:20px; } .preview-label,.review-note { margin-left:20px; margin-right:20px; } main { padding:23px 22px; } .utility { padding:0 22px; } .a-grid { grid-template-columns:minmax(0,1fr) 220px; gap:18px; } .side { padding-left:18px; } .metric { padding-left:10px; } .metric-name{font-size:10px;} .metric-value{font-size:23px;} }
+    @media(max-width:800px) { .app { grid-template-columns:1fr; } aside { display:none; } .a-grid { grid-template-columns:1fr; } .side { border-left:0; border-top:1px solid var(--line); padding:20px 0 0; } .summary { grid-template-columns:repeat(3,1fr); gap:16px 0; } .metric:nth-child(4){padding-left:0;border:0;} .options { flex-wrap:wrap; } .option { flex:1; min-width:260px; } .stage-label { display:none; } .review-note { flex-direction:column; gap:8px; } .heading { align-items:start; flex-wrap:wrap; } .b-summary { gap:15px; flex-wrap:wrap; } .filter-row { flex-wrap:wrap; gap:12px; } .utility-right { gap:10px; } }
+    @media(prefers-reduced-motion:reduce) { *,*:before,*:after { animation:none!important; transition:none!important; } }
+  a { text-decoration:none; color:var(--green); } a.mock-button.primary { color:white; } button.nav-item { border:0; background:transparent; width:100%; text-align:left; font:inherit; font-size:13px; } button.nav-item:hover { background:#f1f5ef; } .later-link { border:0; padding:0; background:transparent; } dialog { max-width:420px; border:1px solid var(--line); border-radius:9px; padding:25px; color:var(--ink); } dialog::backdrop { background:#20362a35; } dialog p { color:var(--muted); font-size:13px; line-height:1.8; } dialog h3 { font-size:17px; }
+</style>
+</head>
+<body>
+  <header class="review"><div class="review-line"><div><div class="eyebrow">QUOTE SYSTEM / PRD V3</div><h1>销售 PC 原型</h1><p>首页已采用待办工作台。可从新建采购单或校对入口，进入下一项页面布局审阅。</p></div><div class="stage-label"><a href="purchase-review.html">审阅采购单新建与校对 →</a></div></div></header>
+  <div class="preview-label"><strong>已确认 / 待办工作台</strong><span>虚构演示数据 · 不连接真实系统</span></div><div class="app">
+    <aside aria-label="销售导航布局预览">
+      <div class="brand"><span class="brand-mark">饮</span>饮片报价</div>
+      <div class="nav-item active"><svg viewBox="0 0 20 20"><path d="M3 9 10 3l7 6v8h-5v-5H8v5H3Z"/></svg>工作台</div>
+      <button type="button" class="nav-item" data-later="采购单"><svg viewBox="0 0 20 20"><path d="M5 3h10v14H5zM7 7h6M7 10h6M7 13h4"/></svg>采购单</button>
+      <button type="button" class="nav-item" data-later="报价单"><svg viewBox="0 0 20 20"><path d="M4 4h12v12H4zM7 7h6M7 10h6M7 13h3"/></svg>报价单</button>
+      <div class="nav-title">档案与回款</div>
+      <button type="button" class="nav-item" data-later="历史订单"><svg viewBox="0 0 20 20"><path d="M3 5h14v3H3zM5 8v9h10V8M8 11h4"/></svg>历史订单</button>
+      <button type="button" class="nav-item" data-later="回款台账"><svg viewBox="0 0 20 20"><path d="M3 5h14v11H3zM12 9h5v4h-5zM5 3h9"/></svg>回款台账</button>
+      <button type="button" class="nav-item" data-later="医院分析"><svg viewBox="0 0 20 20"><path d="M3 3v14h14M6 13V9m4 4V6m4 7V3"/></svg>医院分析</button>
+      <div class="nav-title">基础资料</div>
+      <button type="button" class="nav-item" data-later="商品库与来源批次">商品库与来源批次</button><button type="button" class="nav-item" data-later="医院与采购员">医院与采购员</button><button type="button" class="nav-item" data-later="厂家管理">厂家管理</button>
+      <div class="nav-end"><strong>销售员端</strong><br>同一账号 · PC 与小程序协同</div>
+    </aside>
+    <div class="workspace">
+      <div class="utility"><span>销售 / 工作台</span><div class="utility-right"><span><i class="new-dot"></i>新采购单 2</span><span><i class="new-dot"></i>新厂家报价 1</span><span><span class="avatar">林</span>林销售</span></div></div>
+      <main>
+        <section class="layout-panel" id="layout-a" >
+          <div class="heading"><div><h2>工作台</h2><div class="sub">2026 年 10 月 16 日，周五 · 我负责的订单</div></div><div class="actions"><button type="button" class="mock-button" data-later="历史纸单补录">历史纸单补录</button><a class="mock-button primary" href="purchase-review.html#new">＋ 新建采购单</a></div></div>
+          <div class="summary" aria-label="报价处理阶段">
+            <div class="metric"><div class="metric-name">待校对</div><div class="metric-value">2</div></div>
+            <div class="metric"><div class="metric-name">厂家报价中</div><div class="metric-value">3</div></div>
+            <div class="metric"><div class="metric-name">可计价</div><div class="metric-value">1</div></div>
+            <div class="metric"><div class="metric-name">报价草稿</div><div class="metric-value">2</div></div>
+            <div class="metric"><div class="metric-name">已导出待发送</div><div class="metric-value">1</div></div>
+            <div class="metric"><div class="metric-name">已发送待确认</div><div class="metric-value">2</div></div>
+          </div>
+          <div class="a-grid"><section><div class="section-title"><h3>报价待办</h3><button type="button" class="small-link later-link" data-later="全部采购单 →">全部采购单 →</button></div><div class="tabs"><span class="tab-active">优先处理</span><span>厂家报价中 3</span><span>已发送待确认 2</span></div>
+            <div class="task"><div class="task-top"><span class="hospital">杏林医院</span><span class="tag">待校对</span></div><div class="meta">CG-20261016-001 · R1 · 今天 08:40 接收</div><div class="task-bottom"><span>5 味药 · 采购原单 1 张</span><a class="task-action" href="purchase-review.html">校对采购单 →</a></div></div>
+            <div class="task"><div class="task-top"><span class="hospital">和济中医院</span><span class="tag">可计价</span></div><div class="meta">CG-20261015-002 · R1 · 两家厂家均已提交</div><div class="task-bottom"><span>24 味药 · 采购规格与单位已冻结</span><button type="button" class="task-action later-link" data-later="进入计价 →">进入计价 →</button></div></div>
+            <div class="task"><div class="task-top"><span class="hospital">青禾医院</span><span class="tag tag-neutral">已导出待发送</span></div><div class="meta">CG-20261014-003 · R1 · 报价 V1</div><div class="task-bottom"><span>报价有效至 2026-10-20</span><button type="button" class="task-action later-link" data-later="查看报价 →">查看报价 →</button></div></div>
+            <div class="workspace-foot">此处展示优先处理的 3 张示例单；完整阶段列表将在后续原型中补齐。</div>
+          </section><section class="side"><div class="section-title"><h3>回款跟进</h3><button type="button" class="small-link later-link" data-later="台账 →">台账 →</button></div><div class="balance-title">未收余额</div><div class="balance"><small>¥</small>38,000.00</div><div class="subtle">含暂停催收 1 单，¥3,000.00</div><div class="receivable-stats"><div><div class="stat-detail">今日到期 · 2 单</div><div class="stat-amount">¥8,000.00</div></div><div><div class="stat-detail overdue">逾期 · 2 单</div><div class="stat-amount overdue">¥15,000.00</div></div></div>
+            <div class="due-row"><div class="due-top"><span>杏林医院</span><span class="money">¥10,000.00</span></div><div class="due-bottom"><span>CG-20260708-001</span><span class="due-label">逾期 10 天</span></div></div>
+            <div class="due-row"><div class="due-top"><span>和济中医院</span><span class="money">¥5,000.00</span></div><div class="due-bottom"><span>CG-20260714-002</span><span class="due-label">逾期 4 天</span></div></div>
+            <div class="due-row"><div class="due-top"><span>青禾医院</span><span class="money">¥5,000.00</span></div><div class="due-bottom"><span>CG-20260718-003</span><span>今日到期</span></div></div>
+            <div class="exception">取消 / 退款待处理 1 单 · 催收已暂停<br>报价完成后，未收余额仍继续跟进。</div>
+          </section></div>
+        </section>
+        
+      </main>
+    </div>
+  </div>
+  <footer class="review-note"><span>首页 A 布局已确认 · 其他页面按顺序补齐</span><a href="purchase-review.html">下一项：采购单新建与校对 →</a></footer><dialog id="future-dialog"><form method="dialog"><h3 id="future-title"></h3><p>该页面将在后续原型中逐项审阅。本次先查看采购单新建与校对，不会提交真实业务数据。</p><button class="mock-button primary">知道了</button></form></dialog>
+  
+  <script>
+(() => {
+  const dialog = document.getElementById('future-dialog');
+  document.querySelectorAll('[data-later]').forEach(button => button.addEventListener('click', () => {
+    document.getElementById('future-title').textContent = button.dataset.later.replace(/\s*→$/, '');
+    dialog.showModal();
+  }));
+  if (location.protocol !== 'file:') document.querySelectorAll('a[href]').forEach(link => {
+    const href = link.getAttribute('href');
+    if (/^[a-z-]+\.html(?:#[a-z-]+)?$/.test(href)) link.setAttribute('href', '/files/' + href);
+  });
+})();
+</script>
+</body>
+</html>
+
