@@ -300,4 +300,4 @@ PRD 其余草稿增删行、提交、厂家取消/替换、报价换版与作废
 
 厂家链接页面关闭后的再次发送方式已确认并同步 PRD。设计确认不代表身份已开通或接口已实现；真实微信能力和部署 Cookie/CSRF 仍按第九节验收。
 
-[第四部分状态流转与时间边界](state-time-boundary-design-v1.md) 已确认日期截止、提醒调度和各状态的允许操作；后续部署与外部接入验收见 [第五部分草案](deployment-cost-design-v1.md)。
+[第四部分状态流转与时间边界](state-time-boundary-design-v1.md) 已确认日期截止、提醒调度和各状态的允许操作；部署目标与外部接入验收要求见已确认的 [第五部分](deployment-cost-design-v1.md)。

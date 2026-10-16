@@ -201,7 +201,7 @@ background_jobs 保存 job_type、business_id、去重键、payload_reference、
 | analytics_query_snapshots | 创建者、权限范围版本、筛选摘要、指标结果、生成/到期时间；仅为有期限的查询快照，绑定创建者。 |
 | analytics_query_snapshot_items | 快照外键、根订单/所选修订/确认来源及必要的行投影、稳定分页序号；同快照内序号唯一，来源版本可追溯。 |
 
-清理任务只清理过期查询快照及无业务引用的临时文件，不级联清理真实订单、导出、核实或回款历史。快照保留期限和任务超时等运行参数见第五部分草案的试用配置，整体确认前仍为建议，不能据此改动业务有效期。
+清理任务只清理过期查询快照及无业务引用的临时文件，不级联清理真实订单、导出、核实或回款历史。快照保留期限和任务超时等运行参数见已确认的第五部分试用配置，实现阶段须验证，不能据此改动业务有效期。
 
 ## 九 实现阶段的验证要求
 
@@ -220,4 +220,4 @@ background_jobs 保存 job_type、business_id、去重键、payload_reference、
 
 本部分已确认：同单统一根锁与草稿乐观版本、数据库唯一约束配合幂等请求、两种应收来源、真实回款记录作为累计已收来源，以及首次导出期间的可回收占用和两阶段文件绑定。图表和下钻通过同一查询快照读取，权限变化使旧快照失效。
 
-[第三部分接口与身份权限](api-identity-permission-design-v1.md) 和 [第四部分状态与时间](state-time-boundary-design-v1.md) 已确认登录、权限、日期截止与提醒派发边界；部署资源见 [第五部分草案](deployment-cost-design-v1.md)。本部分不扩大实际退款/核销或历史未知数据的业务范围。
+[第三部分接口与身份权限](api-identity-permission-design-v1.md) 和 [第四部分状态与时间](state-time-boundary-design-v1.md) 已确认登录、权限、日期截止与提醒派发边界；部署资源见已确认的 [第五部分](deployment-cost-design-v1.md)。本部分不扩大实际退款/核销或历史未知数据的业务范围。
