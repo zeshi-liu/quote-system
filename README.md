@@ -6,10 +6,11 @@
 
 - [PRD v3（当前需求基线）](docs/quote-system-prd-v3.md)：已整合本轮确认需求，详细设计待确认项集中在第 19 节。
 - [需求增补与决策记录（2026-10-15）](docs/requirement-consensus-2026-10-15.md)：保留决策来源，已确认条目已合并至 PRD；建议及待确认事项另行标记。
-- [开发设计说明书第一部分](docs/development-design-v1.md)：整体架构与软件技术栈已确认，腾讯云实例规格、数据库部署组合及费用后续评估。
+- [开发设计说明书第一部分](docs/development-design-v1.md)：整体架构与软件技术栈已确认；两人试用采用单机自建 PostgreSQL，具体云资源及费用仍待核价。
 - [开发设计说明书第二部分](docs/database-transaction-design-v1.md)：数据库关系、金额精度、同单锁与幂等、导出占用和查询快照方案已确认。
 - [开发设计说明书第三部分](docs/api-identity-permission-design-v1.md)：接口契约、账号登录绑定、会话和角色/订单权限已确认；尚未创建数据库或应用工程。
-- [开发设计说明书第四部分草案](docs/state-time-boundary-design-v1.md)：状态允许操作、有效期、账期与每日提醒的时间边界，待审阅；采购修订不回退的业务选择已确认。
+- [开发设计说明书第四部分](docs/state-time-boundary-design-v1.md)：状态允许操作、有效期、自然日账期、每日 09:00 提醒及图表日期分组已确认。
+- [开发设计说明书第五部分草案](docs/deployment-cost-design-v1.md)：首批 2 名销售员已选择 A 单机自建路线，补齐资源限制、备份恢复和发布步骤；整体设计待审阅，预算和采购未确认。
 - [需求共识](docs/requirement-consensus-2026-07-05.md)
 - [中保真原型说明](docs/ui-ux-prototype-spec.md)
 

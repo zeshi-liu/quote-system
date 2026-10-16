@@ -5,11 +5,12 @@
 - 当前业务需求以 `docs/quote-system-prd-v3.md` 为准，决策来源见 `docs/requirement-consensus-2026-10-15.md`。
 - `docs/quote-system-prd.md`、2026-07-05 共识及现有 prototype 属于旧范围，不覆盖 v3 已确认规则。
 - `.agents/` 中角色说明若仍引用旧 PRD 或内部销售单端范围，按当前用户指令及 v3 纠正解释，不据此缩小已确认的 PC、小程序、医院轻量端和厂家 H5 范围。
-- `docs/development-design-v1.md` 的软件架构与技术栈已由用户确认：Vue 3/TypeScript、uni-app、NestJS、PostgreSQL、腾讯云服务器与 COS；数据库自建或托管及实例费用仍待部署评估。
+- `docs/development-design-v1.md` 的软件架构与技术栈已由用户确认：Vue 3/TypeScript、uni-app、NestJS、PostgreSQL、腾讯云服务器与 COS；两人试用已选单机自建 PostgreSQL，具体云资源及费用仍待核价。
 - `docs/database-transaction-design-v1.md` 的同单锁、幂等、导出占用及查询快照方案已由用户确认；数据库与应用工程仍未创建。
 - `docs/api-identity-permission-design-v1.md` 的接口、身份、会话与权限设计已于 2026-10-16 确认；尚未实现或完成真实微信联调。
 - 厂家链接页面关闭后须重新生成并提示旧链接失效，原 token 仍只存哈希；厂家已提交后的重新生成仍须明确按重新询价及基准失效规则办理。
-- `docs/state-time-boundary-design-v1.md` 为第四部分状态与时间边界草案，日期截止和提醒时刻待审阅。MVP 不回退旧采购修订已于 2026-10-16 确认：当前草稿直接改正，冻结后创建下一修订，不恢复旧链接或旧报价。
+- `docs/state-time-boundary-design-v1.md` 的状态、有效期、自然日账期、09:00 提醒及图表日期分组方案已于 2026-10-16 确认；尚未实现或完成真实调度验收。MVP 不回退旧采购修订：当前草稿直接改正，冻结后创建下一修订，不恢复旧链接或旧报价。
+- 首批实际为 2 名销售员；2026-10-16 已选择 A：按单台 2 核 4 GB 服务器自建 PostgreSQL、文件放 COS 的路线设计试用。`docs/deployment-cost-design-v1.md` 整体仍待审阅；地域、采购配置、预算及维护责任人未落实，不把路线确认当作购买授权、正式报价或性能保证。每小时备份及恢复点 2 小时、恢复服务 4 小时为待整体审阅和演练的目标。
 
 ## 工作方式
 
