@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>报价系统 v3 · 厂家 H5 表单原型</title>
+  <style>
+    :root{--ink:#243129;--muted:#748077;--green:#216349;--soft:#edf4ef;--line:#e0e7df;--red:#a04435;--amber:#8a663e}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:#eef1ed;color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}a{color:var(--green);text-decoration:none}button:disabled{opacity:.5;cursor:default}:focus-visible{outline:3px solid #86ad95;outline-offset:3px}.review{padding:23px 35px 19px;background:#fff;border-bottom:1px solid var(--line)}.review-head{display:flex;justify-content:space-between;align-items:start;gap:25px}.eyebrow{font-size:10px;letter-spacing:1.3px;color:var(--green);font-weight:600}.review h1{font-size:23px;font-weight:650;letter-spacing:-.5px;margin:4px 0}.review p{font-size:12px;color:var(--muted);margin:4px 0 16px}.review a{font-size:12px;white-space:nowrap;padding-top:7px}.controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--muted)}.controls label{display:flex;gap:8px;align-items:center}.controls select{font-size:11px;border:1px solid #d3dfd2;border-radius:4px;padding:7px;background:#fff;color:var(--ink);max-width:100%}.controls .clock{margin-left:auto;font-size:10px}.demo-button{border:1px solid #d3dfd2;border-radius:4px;background:white;padding:7px 10px;font-size:11px;color:var(--green)}.stage{display:grid;grid-template-columns:240px minmax(0,480px);align-items:start;justify-content:center;gap:70px;padding:32px 25px 45px}.notes{padding-top:20px;position:sticky;top:25px;color:var(--muted);font-size:12px}.notes .step{font-size:10px;color:var(--green);letter-spacing:1px}.notes h2{font-size:21px;font-weight:550;color:var(--ink);margin:8px 0 14px}.notes p{margin:0 0 24px;line-height:1.9}.notes dl{margin:25px 0}.notes dt{font-size:12px;color:var(--ink);padding-top:18px;border-top:1px solid #d7e0d5;margin-top:18px}.notes dd{margin:6px 0 0;font-size:11px;line-height:1.9}.notes .boundary{font-size:10px;margin-top:35px}.phone{min-width:0;background:#fff;border:1px solid #d8e1d6;border-radius:12px;box-shadow:0 12px 45px #33493308;overflow:clip}.masthead{padding:17px 23px;border-bottom:1px solid var(--line);font-size:12px;display:flex;align-items:center;gap:9px;color:var(--green)}.mark{width:23px;height:23px;background:var(--green);color:#fff;border-radius:5px;display:inline-grid;place-items:center;font-size:13px}.masthead small{margin-left:auto;color:var(--muted);font-size:10px}.context{padding:24px 23px 0}.kicker{font-size:11px;color:var(--muted)}.context h2{font-size:25px;font-weight:600;letter-spacing:-.6px;margin:3px 0 10px}.context .factory{font-size:13px}.order-id{color:var(--muted);font-size:11px;margin:6px 0 18px;font-variant-numeric:tabular-nums}.deadline{border-left:2px solid #b58551;background:#faf6ef;padding:10px 12px;color:var(--amber);font-size:11px}.deadline strong{font-size:14px;display:block;font-weight:550;font-variant-numeric:tabular-nums}.deadline small{font-size:10px;display:block;margin-top:3px}.basis{font-size:12px;color:var(--green);margin:17px 0 0}.validity{padding:20px 23px;border-bottom:8px solid #f3f6f1}.field-title{display:block;font-size:13px;font-weight:550;margin-bottom:8px}.required{font-size:11px;font-weight:400;color:var(--muted);margin-left:6px}.date-input{display:block;min-width:0;width:100%;min-height:44px;padding:9px 12px;border:1px solid #cedbcd;border-radius:5px;background:#fff;color:var(--ink);font-variant-numeric:tabular-nums}.help{font-size:11px;color:var(--muted);margin:7px 0 0;line-height:1.8}.section-title{padding:21px 23px 5px;display:flex;justify-content:space-between;align-items:center}.section-title h3{font-size:14px;font-weight:550;margin:0}.section-title span{font-size:11px;color:var(--muted)}.quote-line{padding:20px 23px;border-bottom:1px solid var(--line);scroll-margin-top:18px}.line-head{display:flex;gap:12px;align-items:start;margin-bottom:17px}.index{font-size:11px;color:var(--muted);padding-top:4px;font-variant-numeric:tabular-nums}.line-name{font-size:17px;font-weight:550;margin:0}.line-spec{font-size:11px;color:var(--muted);margin-top:4px}.qty{font-size:15px;margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums}.qty small{font-size:11px;color:var(--muted)}fieldset{margin:0;padding:0;border:0;min-width:0}legend{font-size:11px;color:var(--muted);margin-bottom:8px}.supply-options{display:flex;gap:10px}.supply-option{position:relative;flex:1;min-width:0;display:flex;align-items:center;gap:7px;justify-content:center;border:1px solid #d7dfd5;border-radius:5px;min-height:44px;cursor:pointer;font-size:13px;transition:background .16s,border-color .16s}.supply-option:has(input:checked){border-color:var(--green);background:var(--soft);color:var(--green)}input[type=radio],input[type=checkbox]{accent-color:var(--green);width:16px;height:16px;margin:0;flex:none}.price-area{margin-top:15px;animation:reveal .16s ease-out}.price-label{font-size:11px;color:var(--muted);display:block;margin-bottom:6px}.price-input{display:flex;border:1px solid #cedbcd;border-radius:5px;overflow:hidden;align-items:center}.price-input input{width:100%;min-width:0;border:0;background:#fff;padding:10px 12px;min-height:44px;font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums}.price-input span{font-size:11px;color:var(--muted);padding:0 12px;white-space:nowrap}.missing-note{font-size:11px;color:var(--amber);margin-top:12px}.remark{margin-top:12px}.remark summary{font-size:11px;color:var(--muted);cursor:pointer;min-height:30px;padding:3px 0}.remark label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}.remark textarea{display:block;width:100%;resize:vertical;min-height:66px;border:1px solid #d4dfd0;border-radius:5px;background:white;padding:9px 11px;font-size:13px}.error{color:var(--red);font-size:11px;margin:7px 0 0}.error:empty{display:none}[aria-invalid=true]{border-color:var(--red)!important}.line-error{outline:0}.line-error .supply-option{border-color:#c78b80}.submit-message{margin:16px 23px 0;padding:11px 12px;background:#faf3f0;color:var(--red);font-size:12px}.submit-message:empty{display:none}.submit-bar{position:sticky;bottom:0;background:#ffffffed;backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:14px 23px 18px;display:flex;gap:15px;align-items:center;z-index:2}.progress{font-size:13px}.progress small{display:block;color:var(--muted);font-size:10px;margin-top:2px}.primary{background:var(--green);color:white;border:1px solid var(--green);border-radius:5px;min-height:44px;padding:10px 17px;font-size:13px}.submit-bar .primary{margin-left:auto}.disclaimer{text-align:center;color:#8a9489;font-size:10px;padding:14px 20px 18px;background:#f8faf6}.state{padding:45px 23px 50px}.state-icon{width:43px;height:43px;display:grid;place-items:center;border-radius:50%;background:var(--soft);color:var(--green);font-size:22px;margin-bottom:16px}.state h2{font-size:22px;font-weight:550;margin:0 0 8px}.state p{font-size:13px;color:var(--muted);line-height:1.9;margin:5px 0}.state .primary{margin-top:20px}.receipt-head{padding:25px 23px;background:#f0f6f0;border-bottom:1px solid var(--line)}.receipt-head .state-icon{margin-bottom:10px}.receipt-head h3{font-size:20px;margin:0 0 6px;font-weight:550}.receipt-head p{font-size:12px;color:var(--muted);margin:6px 0}.receipt-facts{display:grid;grid-template-columns:auto 1fr;gap:6px 15px;font-size:11px;margin:18px 0 0}.receipt-facts dt{color:var(--muted)}.receipt-facts dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}.receipt-line{padding:17px 23px;border-bottom:1px solid var(--line)}.receipt-line .line-head{margin-bottom:10px}.receipt-value{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--green)}.receipt-value.missing{color:var(--amber)}.receipt-remark{font-size:11px;color:var(--muted);margin-top:8px;overflow-wrap:anywhere;white-space:pre-wrap}.receipt-note{padding:19px 23px;font-size:11px;color:var(--muted)}dialog{width:calc(100% - 32px);max-width:440px;max-height:85svh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:24px;color:var(--ink);box-shadow:0 20px 90px #24312930}dialog::backdrop{background:#23372a55}dialog h2{font-size:20px;margin:0 0 10px;font-weight:550}dialog p{font-size:12px;color:var(--muted);line-height:1.9}.confirm-meta{font-size:12px;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:14px 0}.confirm-list{list-style:none;padding:0;margin:0}.confirm-list li{display:flex;justify-content:space-between;gap:15px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px}.confirm-list li small{color:var(--muted);display:block;font-size:10px}.ack{display:flex;align-items:start;gap:9px;font-size:12px;line-height:1.8;margin:20px 0}.ack input{margin-top:3px}.dialog-actions{display:flex;justify-content:end;gap:10px;margin-top:15px}.secondary{border:1px solid #d3dfd2;background:#fff;color:var(--ink);border-radius:5px;padding:10px 15px;min-height:44px;font-size:13px}@keyframes reveal{from{opacity:.5;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}@media(max-width:860px){.stage{grid-template-columns:minmax(0,480px);gap:0;padding:24px 15px}.notes{display:none}.controls .clock{margin-left:0;width:100%}.review{padding:20px}.review-head{flex-wrap:wrap;gap:0}.review a{padding:0 0 12px}}@media(max-width:520px){.stage{display:block;padding:0}.phone{border:0;border-radius:0;box-shadow:none}.review{padding:17px 18px}.review h1{font-size:21px}.controls{gap:10px 15px}.controls label{flex-wrap:wrap;gap:4px}.controls select{min-height:36px}.review p{margin-bottom:12px}.masthead{padding-top:14px;padding-bottom:14px}.context h2{font-size:24px}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+  </style>
+</head>
+<body>
+  <header class="review">
+    <div class="review-head"><div><div class="eyebrow">QUOTE SYSTEM / PRD V3</div><h1>厂家 H5 报价表单</h1><p>第 4 项已于 2026-10-19 确认 · 以下控件仅用于演示，厂家页面从“饮片报价”开始。</p></div><a href="supplier-inquiry.html">← 返回已确认的询价页</a><a href="pricing-workbench.html">查看已确认的计价工作台 →</a></div>
+    <div class="controls">
+      <label>演示场景<select id="scenario"><option value="edit">正常填写</option><option value="all-missing">全缺货填写</option><option value="submitted">已提交回执（原会话）</option><option value="expired">填写链接已到期</option><option value="revoked">旧链接已被重新生成</option><option value="cancelled">厂家任务已取消</option><option value="superseded">采购修订已更新</option><option value="completed">订单已完成</option><option value="unknown">提交结果待核实</option></select></label>
+      <label>模拟提交结果<select id="outcome"><option value="success">正常成功</option><option value="failure">明确失败，保留输入</option><option value="unknown">结果未知，先核对</option><option value="expires">确认时链接恰好到期</option></select></label>
+      <button type="button" class="demo-button" id="fill-demo">填入虚构报价</button>
+      <span class="clock">虚构时钟：2026-10-16 10:00（北京时间）· 切换场景重置样例</span>
+    </div>
+  </header>
+  <div class="stage">
+    <aside class="notes"><div class="step">04 / 厂家外部页面</div><h2>一页填完，整单复核</h2><p>手机上逐行选择供货状态，提交前集中核对。采购明细不允许改写。</p><dl><dt>两种期限分别展示</dt><dd>链接控制能否填写提交；厂家有效至日期控制价格使用期限。</dd><dt>缺货也保留原行</dt><dd>无法供货无需填价。整单全部缺货，也可以完整提交。</dd><dt>提交后只读</dt><dd>查看本次回执；需要更正时联系销售重新询价。</dd></dl><p class="boundary">仅独立虚构样例，与销售询价页不共享状态。刷新后重置；不接后端，不发送消息。</p></aside>
+    <article class="phone" aria-label="厂家手机页面">
+      <div class="masthead"><span class="mark">饮</span>饮片报价<small>本次厂家报价</small></div>
+      <section id="context" class="context"><div class="kicker">本次询价医院</div><h2>杏林医院</h2><div class="factory">报价厂家：本草饮片甲厂</div><div class="order-id">CG-20261016-001 · 采购修订 R1</div><div class="deadline" id="deadline">填写链接截止（北京时间）<strong>2026-10-18 10:00</strong><small>本链接于 10 月 16 日 10:00 生成，有效 48 小时。</small></div><p class="basis">报价均须为含税、含抽点单价</p></section>
+      <form id="quote-form" novalidate>
+        <section class="validity"><label for="valid-until" class="field-title">厂家报价有效至日期<span class="required">必填</span></label><input type="date" class="date-input" id="valid-until" min="2026-10-16" aria-describedby="valid-help valid-error"><p class="help" id="valid-help">含所选当天，最早可选提交当日。与上方填写链接截止时间分开。</p><p class="error" id="valid-error" role="alert"></p></section>
+        <div class="section-title"><h3>采购明细</h3><span>5 味 · 共 85.50 kg</span></div><div id="lines"></div>
+        <p class="submit-message" id="submit-message" role="alert"></p>
+        <div class="submit-bar"><div class="progress"><span id="progress" role="status" aria-live="polite">已完成 0 / 5 行</span><small>所有行均需选择供货状态</small></div><button type="submit" class="primary" id="review-submit">核对并提交</button></div>
+      </form>
+      <section id="receipt" hidden></section><section id="state" class="state" hidden aria-live="polite"></section>
+      <footer class="disclaimer">虚构原型 · 不提交真实数据</footer>
+    </article>
+  </div>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title">确认提交本次报价？</h2><p>杏林医院 · 本草饮片甲厂<br>提交成功后不能修改。如需更正，请联系销售重新询价。</p><div id="confirm-meta" class="confirm-meta"></div><ul id="confirm-lines" class="confirm-list"></ul><label class="ack"><input type="checkbox" id="acknowledge"><span>我已核对供货状态、报价有效期，所有价格均为含税、含抽点单价，并知悉提交后不可修改。</span></label><div class="dialog-actions"><button type="button" class="secondary" id="back-edit">返回修改</button><button type="button" class="primary" id="confirm-submit" disabled>确认提交</button></div></dialog>
+  <script>
+    (() => {
+      'use strict';
+      const $ = id => document.getElementById(id);
+      const frozenLines = [
+        {id:'l1',name:'黄芪',spec:'斜片',quantity:'30.00',sample:'38.50'},
+        {id:'l2',name:'甘草',spec:'薄片',quantity:'8.00',sample:'17.80'},
+        {id:'l3',name:'当归',spec:'全归片',quantity:'15.00',sample:'92.00'},
+        {id:'l4',name:'党参',spec:'段',quantity:'20.00',sample:'56.50'},
+        {id:'l5',name:'白术',spec:'',quantity:'12.50',sample:null}
+      ];
+      const demoToday = '2026-10-16';
+      let answers, mode = 'edit', busy = false, pending = null, receipt = null;
+      const node = (tag, cls, text) => {const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
+      const validPrice = value => /^\d+(?:\.\d{1,2})?$/.test(value) && Number.isFinite(Number(value)) && Number(value)>0;
+      const complete = a => a.supply==='unavailable' || (a.supply==='available' && validPrice(a.price));
+      const priceText = value => Number(value).toFixed(2);
+      function refreshProgress(){ $('progress').textContent='已完成 '+answers.filter(complete).length+' / 5 行'; }
+      function clearError(index){$('line-error-'+index).textContent='';$('line-'+index).classList.remove('line-error');$('price-'+index).removeAttribute('aria-invalid');}
+      function buildLines(){
+        $('lines').replaceChildren();
+        frozenLines.forEach((line,index) => {
+          const answer=answers[index],section=node('section','quote-line');section.id='line-'+index;
+          const head=node('div','line-head'),description=node('div');description.append(node('h4','line-name',line.name),node('div','line-spec','规格：'+(line.spec||'未提供')));
+          const quantity=node('div','qty',line.quantity+' ');quantity.append(node('small','','kg'));head.append(node('span','index',String(index+1).padStart(2,'0')),description,quantity);section.append(head);
+          const group=node('fieldset'),legend=node('legend','','供货状态（必选）'),options=node('div','supply-options');group.append(legend,options);
+          [['available','可供货'],['unavailable','无法供货']].forEach(([value,label]) => {
+            const choice=node('label','supply-option'),input=node('input');input.type='radio';input.name='supply-'+index;input.value=value;input.checked=answer.supply===value;input.setAttribute('aria-label',line.name+' '+label);
+            input.addEventListener('change',()=>{answer.supply=value;if(value==='unavailable'){answer.price='';$('price-'+index).value='';} $('price-area-'+index).hidden=value!=='available';$('missing-'+index).hidden=value!=='unavailable';clearError(index);refreshProgress();});choice.append(input,document.createTextNode(label));options.append(choice);
+          });section.append(group);
+          const area=node('div','price-area');area.id='price-area-'+index;area.hidden=answer.supply!=='available';const priceLabel=node('label','price-label','含税含抽点单价');priceLabel.htmlFor='price-'+index;
+          const priceBox=node('div','price-input'),price=node('input');price.id='price-'+index;price.type='text';price.inputMode='decimal';price.autocomplete='off';price.placeholder='请输入单价';price.value=answer.price;price.setAttribute('aria-label',line.name+' 含税含抽点单价');price.setAttribute('aria-describedby','line-error-'+index);
+          price.addEventListener('input',()=>{answer.price=price.value;clearError(index);refreshProgress();});priceBox.append(price,node('span','','元/kg'));area.append(priceLabel,priceBox);section.append(area);
+          const missing=node('div','missing-note','本行无法供货，不填写单价。');missing.id='missing-'+index;missing.hidden=answer.supply!=='unavailable';section.append(missing);
+          const remark=node('details','remark');remark.open=!!answer.remark;const remarkLabel=node('label','','本行备注（选填）');remarkLabel.htmlFor='remark-'+index;const text=node('textarea');text.id='remark-'+index;text.value=answer.remark;text.placeholder='可填写供货说明';text.setAttribute('aria-label',line.name+' 备注');text.addEventListener('input',()=>{answer.remark=text.value;});remark.append(node('summary','','添加备注（选填）'),remarkLabel,text);section.append(remark);
+          const error=node('p','error');error.id='line-error-'+index;error.setAttribute('role','alert');section.append(error);$('lines').append(section);
+        });refreshProgress();
+      }
+      function snapshot(){return {validUntil:$('valid-until').value,lines:answers.map(a=>({...a}))};}
+      function resetAnswers(allMissing=false){answers=frozenLines.map(()=>({supply:allMissing?'unavailable':'',price:'',remark:''}));}
+      function sampleAnswers(){return frozenLines.map(l=>({supply:l.sample?'available':'unavailable',price:l.sample||'',remark:l.sample?'':'本次无货'}));}
+      const unavailableStates={
+        expired:['填写链接已到期','本次链接已于 2026-10-18 10:00（北京时间）截止。','请联系销售获取当前有效的填写链接。'],
+        revoked:['旧链接已失效','销售已重新生成填写链接，旧链接及已打开页面不能继续使用。','请使用销售新发的链接，重新填写未提交内容。'],
+        cancelled:['本次询价已取消','当前厂家任务已取消，不能继续填写或提交。','如有疑问，请联系销售。'],
+        superseded:['采购明细已更新','本次链接对应的旧采购修订已失效，不能继续提交。','请联系销售，按新链接中的采购明细报价。'],
+        completed:['本次订单已完成','本次报价入口已关闭。','如需再次报价，请联系销售。']
+      };
+      function showReceipt(){
+        const target=$('receipt');target.replaceChildren();const header=node('div','receipt-head');header.append(node('div','state-icon','✓'),node('h3','','本次报价已提交'),node('p','','提交后只读。需要更正时，请联系销售重新询价。'));
+        const facts=node('dl','receipt-facts');[['提交编号','甲厂 · S1（演示）'],['提交时间','2026-10-16 10:00（北京时间）'],['报价有效至',receipt.validUntil+'（含当日）'],['供货情况',receipt.lines.filter(a=>a.supply==='available').length+' 行可供货 / '+receipt.lines.filter(a=>a.supply==='unavailable').length+' 行无法供货']].forEach(([label,value])=>facts.append(node('dt','',label),node('dd','',value)));header.append(facts);target.append(header);
+        receipt.lines.forEach((answer,index)=>{const line=frozenLines[index],row=node('div','receipt-line'),head=node('div','line-head'),description=node('div');description.append(node('h4','line-name',line.name),node('div','line-spec','规格：'+(line.spec||'未提供')));const quantity=node('div','qty',line.quantity+' kg');head.append(node('span','index',String(index+1).padStart(2,'0')),description,quantity);row.append(head);const value=node('div','receipt-value'+(answer.supply==='unavailable'?' missing':''));value.append(node('span','',answer.supply==='available'?'可供货':'无法供货'),node('span','',answer.supply==='available'?priceText(answer.price)+' 元/kg':'单价留空'));row.append(value);if(answer.remark)row.append(node('div','receipt-remark',answer.remark));target.append(row);});target.append(node('div','receipt-note','仅展示当前会话的本次提交回执，不能再次填写。链接截止不撤销已提交且仍有效的价格。'));
+      }
+      function renderMode(){
+        const editing=mode==='edit'||mode==='all-missing',submitted=mode==='submitted',unknown=mode==='unknown';
+        $('context').hidden=!(editing||submitted||unknown);$('deadline').hidden=!editing;$('quote-form').hidden=!editing;$('receipt').hidden=!submitted;$('state').hidden=editing||submitted;
+        $('fill-demo').disabled=!editing;$('outcome').disabled=!editing;
+        if(editing){buildLines();return;}
+        if(submitted){showReceipt();return;}
+        const state=$('state');state.replaceChildren();state.append(node('div','state-icon',unknown?'…':'!'));
+        if(unknown){state.append(node('h2','','提交结果待核实'),node('p','','提交请求的结果尚未确认。已保留本次内容，请先核对结果，避免重复报价。'));const check=node('button','primary','核对提交结果');check.type='button';check.id='check-result';check.addEventListener('click',()=>{mode='submitted';$('scenario').value='submitted';renderMode();});state.append(check,node('p','help','此样例核对后返回同一次成功提交的回执。'));}
+        else{const info=unavailableStates[mode];state.append(node('h2','',info[0]),node('p','',info[1]),node('p','',info[2]));}
+      }
+      function changeScenario(){
+        if(busy)return;mode=$('scenario').value;pending=null;receipt=null;resetAnswers(mode==='all-missing');$('submit-message').textContent='';$('valid-error').textContent='';$('valid-until').removeAttribute('aria-invalid');$('valid-until').value=mode==='all-missing'?'2026-10-20':'';$('outcome').value='success';
+        if(mode==='submitted'||mode==='unknown')receipt={validUntil:'2026-10-20',lines:sampleAnswers()};renderMode();
+      }
+      $('scenario').addEventListener('change',changeScenario);
+      $('fill-demo').addEventListener('click',()=>{if(busy)return;answers=sampleAnswers();$('valid-until').value='2026-10-20';$('valid-error').textContent='';$('valid-until').removeAttribute('aria-invalid');$('submit-message').textContent='';buildLines();});
+      $('valid-until').addEventListener('input',()=>{$('valid-error').textContent='';$('valid-until').removeAttribute('aria-invalid');});
+      $('quote-form').addEventListener('submit',event=>{
+        event.preventDefault();if(busy||!['edit','all-missing'].includes(mode))return;
+        $('submit-message').textContent='';let first=null;const validUntil=$('valid-until').value;
+        if(!validUntil||validUntil<demoToday){$('valid-error').textContent=validUntil?'有效至日不能早于提交当日（2026-10-16）。':'请选择厂家报价有效至日期。';$('valid-until').setAttribute('aria-invalid','true');first=$('valid-until');}
+        answers.forEach((answer,index)=>{clearError(index);let message='';if(!answer.supply)message='请选择可供货或无法供货。';else if(answer.supply==='available'&&!validPrice(answer.price))message='请输入大于 0、最多两位小数的单价。';if(message){$('line-error-'+index).textContent=message;$('line-'+index).classList.add('line-error');if(answer.supply==='available')$('price-'+index).setAttribute('aria-invalid','true');if(!first)first=answer.supply==='available'?$('price-'+index):$('line-'+index).querySelector('input');}});
+        if(first){first.focus();first.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});return;}
+        pending=snapshot();const available=pending.lines.filter(a=>a.supply==='available').length;$('confirm-meta').textContent='有效至 '+pending.validUntil+'（含当日） · '+available+' 行可供货，'+(5-available)+' 行无法供货';$('confirm-lines').replaceChildren();pending.lines.forEach((answer,index)=>{const item=node('li'),description=node('span','',frozenLines[index].name);description.append(node('small','',frozenLines[index].quantity+' kg · '+(frozenLines[index].spec||'规格未提供')));item.append(description,node('span','',answer.supply==='available'?priceText(answer.price)+' 元/kg':'无法供货 · 无单价'));$('confirm-lines').append(item);});$('acknowledge').checked=false;$('confirm-submit').disabled=true;$('confirm-dialog').showModal();
+      });
+      $('acknowledge').addEventListener('change',()=>{$('confirm-submit').disabled=!$('acknowledge').checked||busy;});
+      $('back-edit').addEventListener('click',()=>{$('confirm-dialog').close();pending=null;});
+      $('confirm-dialog').addEventListener('cancel',event=>{if(busy)event.preventDefault();else pending=null;});
+      $('confirm-submit').addEventListener('click',async()=>{
+        if(busy||!pending||!$('acknowledge').checked)return;busy=true;const submitted=pending,outcome=$('outcome').value;$('confirm-submit').disabled=true;$('back-edit').disabled=true;$('confirm-submit').textContent='正在提交…';$('scenario').disabled=true;$('outcome').disabled=true;$('fill-demo').disabled=true;
+        await new Promise(resolve=>setTimeout(resolve,450));
+        // Local simulation only: production rechecks time/task/revision after acquiring its order lock.
+        $('confirm-dialog').close();pending=null;
+        if(outcome==='expires'){mode='expired';$('scenario').value='expired';renderMode();}
+        else if(outcome==='failure'){$('submit-message').textContent='本次提交明确失败，未生成报价提交。输入已保留，请核对后重试。';}
+        else{receipt=submitted;mode=outcome==='unknown'?'unknown':'submitted';$('scenario').value=mode;renderMode();}
+        busy=false;$('scenario').disabled=false;$('confirm-submit').textContent='确认提交';$('back-edit').disabled=false;const editing=['edit','all-missing'].includes(mode);$('fill-demo').disabled=!editing;$('outcome').disabled=!editing;
+        if(mode==='submitted')$('receipt').scrollIntoView({block:'start'});else if(mode==='unknown'||mode==='expired')$('state').scrollIntoView({block:'start'});
+      });
+      if(location.protocol!=='file:')document.querySelectorAll('a[href]').forEach(link=>{const href=link.getAttribute('href');if(/^[a-z-]+\.html$/.test(href))link.setAttribute('href','/files/'+href);});
+      changeScenario();
+    })();
+  </script>
+</body>
+</html>

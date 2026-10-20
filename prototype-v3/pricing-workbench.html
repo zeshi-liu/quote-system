@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>报价系统 v3 · 销售计价工作台原型</title>
+  <link rel="stylesheet" href="pricing-workbench.css">
+</head>
+<body>
+  <header class="review">
+    <div class="review-top"><div><div class="eyebrow">QUOTE SYSTEM / PRD V3</div><h1>销售计价工作台</h1><p>第 5 项已于 2026-10-19 确认 · 比价、加价与最终确认同屏；仅虚构样例。</p></div><div class="review-links"><a href="supplier-inquiry.html">← 本次厂家询价</a><a href="manufacturer-h5.html">已确认的厂家 H5</a><a href="quote-export.html">报价预览与导出 →</a></div></div>
+    <div class="demo-controls"><label for="scenario">演示场景</label><select id="scenario"><option value="both">两家提交，开始计价</option><option value="one">一家提交，另一家等待</option><option value="missing">两家均全缺货</option><option value="expired">草稿基准价格已过期</option><option value="frozen">已导出 V1，只读查看</option></select><button type="button" class="btn small" id="late-demo">模拟乙厂后到报价</button><button type="button" class="btn small" id="requery-demo">模拟甲厂重新询价</button><span class="demo-clock">虚构时钟：2026-10-16 10:00 · 切换场景重置</span></div>
+  </header>
+  <div class="app">
+    <aside class="sidebar"><div class="brand"><i>饮</i>饮片报价</div><a class="nav" href="index.html">工作台</a><div class="nav active">报价单</div><a class="nav" href="supplier-inquiry.html">本次厂家询价</a><div class="nav-group">档案与回款</div><div class="nav">历史订单</div><div class="nav">回款台账</div><div class="nav">医院分析</div><div class="nav-group">基础资料</div><div class="nav">商品库与来源批次</div><div class="nav">医院与采购员</div><div class="nav">厂家管理</div></aside>
+    <div class="workspace"><div class="utility"><span>销售 / 报价单 / 计价</span><span>林销售 · 当前订单负责人</span></div>
+      <main>
+        <div class="heading"><div><div class="eyebrow">杏林医院 / 采购修订 R1</div><h2>本次报价 <span id="version-tag" class="tag">V1 草稿</span></h2><div class="sub">CG-20261016-001 · 5 味 / 85.50 kg · 原采购明细只读</div></div><button class="btn" id="show-log" type="button">改价日志 <span id="log-count">0</span></button></div>
+        <div class="supplier-strip" id="supplier-strip"></div>
+        <div class="notice" id="readonly-notice" hidden>当前为已导出 V1 的冻结快照，价格与基准均只读。需改价时创建下一版本；该入口将在后续版本管理原型中审阅。</div>
+        <div class="notice late" id="late-notice" hidden><div><strong>有后到报价，草稿尚未采用</strong><p id="late-copy"></p></div><button type="button" class="btn" id="refresh-quotes">查看差异并刷新采用</button></div>
+        <div class="filters"><label class="search"><span>⌕</span><input id="search" type="search" placeholder="搜索品名 / 规格" aria-label="搜索品名或规格"></label><select id="risk-filter" aria-label="筛选报价行"><option value="all">全部明细</option><option value="unconfirmed">仅看未确认</option><option value="risk">仅看风险</option><option value="missing">仅看缺货</option></select><span id="filter-count" class="muted"></span><span class="price-unit">单价：含税、含抽点 · 元/kg</span></div>
+        <div class="batch-toolbar"><label class="check-label"><input type="checkbox" id="select-visible" aria-label="选中当前筛选结果">选中当前结果</label><span class="selection" id="selection-count">已选 0 行</span><select id="batch-scope" aria-label="批量作用范围"><option value="selected">选中行</option><option value="all">全部 5 行（含筛选外）</option></select><select id="batch-method" aria-label="批量加价方式"><option value="">选择加价方式</option><option value="fixed">固定金额</option><option value="percent">比例加价</option><option value="multiple">高开倍率</option></select><input id="batch-parameter" class="parameter" inputmode="decimal" placeholder="参数" aria-label="批量加价参数"><span id="batch-unit" class="muted"></span><button type="button" class="btn" id="batch-calculate">计算推荐价</button><button type="button" class="btn" id="batch-apply">应用推荐价</button><button type="button" class="btn text" id="undo-batch" disabled>撤销上次批量</button></div>
+        <p class="inline-message" id="feedback" role="status" aria-live="polite"></p>
+        <div class="table-scroll"><table class="pricing-table"><thead><tr><th class="check-col"></th><th>采购药品 / 数量</th><th>甲厂最新</th><th>乙厂最新</th><th>实时最低</th><th>草稿已采用基准</th><th>本院最近历史</th><th>推荐价</th><th>最终报价</th><th>状态 / 操作</th></tr></thead><tbody id="pricing-body"></tbody></table></div>
+        <div class="mobile-lines" id="mobile-lines"></div><p id="empty-filter" class="empty-filter" hidden>没有符合筛选条件的药品；整单校验仍覆盖全部 5 行。</p>
+        <div class="validity"><div><label for="hospital-valid-until">医院报价有效至日期</label><input id="hospital-valid-until" type="date" min="2026-10-16"><p id="validity-help"></p></div><div class="totals"><span id="subtotal-label">当前有价行小计</span><strong id="subtotal">—</strong><small id="total-help">尚未确认，不代表应收金额</small></div></div>
+        <div class="action-bar"><div><strong id="confirmation-progress">0 / 5 行最终价已确认</strong><small id="readiness">请逐行计算或填写并确认最终价。</small></div><div class="main-actions"><button type="button" class="btn" id="save-draft">保存草稿（演示）</button><button type="button" class="btn primary" id="preview-quote">校验并预览</button></div></div>
+      </main>
+    </div>
+  </div>
+  <footer class="page-footer"><span>虚构原型 · 无后端 · 不生成文件、不冻结版本、不标记发送</span><span>按整单校验，筛选和选中范围不缩小预览范围。</span></footer>
+  <dialog id="line-dialog" class="drawer" aria-labelledby="line-title"><div class="drawer-heading"><div><div class="eyebrow">单行计价 / 采购明细只读</div><h2 id="line-title"></h2></div><button type="button" class="close-button" id="close-line" aria-label="关闭单行编辑">×</button></div><div id="line-content"></div></dialog>
+  <dialog id="action-dialog" aria-labelledby="action-title"><div class="eyebrow">原型操作 / 仅本页内存</div><h2 id="action-title"></h2><p id="action-copy"></p><div id="action-details"></div><div class="dialog-actions"><button type="button" class="btn" id="action-cancel">取消</button><button type="button" class="btn primary" id="action-confirm">确认</button></div></dialog>
+  <dialog id="preview-dialog" class="preview-dialog" aria-labelledby="preview-title"><div class="eyebrow">报价内容预览 / 未生成文件</div><h2 id="preview-title">杏林医院 · 本次报价</h2><p id="preview-summary"></p><div class="preview-table-scroll"><table class="preview-table"><thead><tr><th>药品 / 规格</th><th>数量 kg</th><th>供货</th><th>单价 元/kg</th><th>金额 元</th></tr></thead><tbody id="preview-body"></tbody></table></div><div class="preview-total" id="preview-total"></div><p>预览不会冻结版本。可另看报价模板与导出状态样例；两页不共享草稿。</p><a href="quote-export.html" class="btn">查看独立预览与导出样例 →</a> <button type="button" class="btn primary" id="close-preview">返回计价</button></dialog>
+  <dialog id="info-dialog" aria-labelledby="info-title"><h2 id="info-title"></h2><div id="info-body"></div><div class="dialog-actions"><button type="button" class="btn primary" id="close-info">知道了</button></div></dialog>
+  <script src="pricing-workbench.js"></script>
+</body>
+</html>

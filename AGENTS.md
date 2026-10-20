@@ -12,7 +12,7 @@
 - `docs/state-time-boundary-design-v1.md` 的状态、有效期、自然日账期、09:00 提醒及图表日期分组方案已于 2026-10-16 确认；尚未实现或完成真实调度验收。MVP 不回退旧采购修订：当前草稿直接改正，冻结后创建下一修订，不恢复旧链接或旧报价。
 - 首批实际为 2 名销售员；2026-10-16 已确认 `docs/deployment-cost-design-v1.md` 整体方案：A 单台 2 核 4 GB 服务器自建 PostgreSQL、文件放 COS，按每小时备份及恢复点 2 小时、恢复服务 4 小时的目标设计试用。地域、采购配置、预算及维护责任人未落实，不把设计确认当作购买授权、正式报价、性能保证或恢复演练通过。
 - 开发设计前五部分已确认，当前按用户顺序进入核心页面原型，以本地浏览器展示、逐项审阅；尚未创建生产应用工程。
-- 销售 PC 首页与采购校对页已于 2026-10-16 分别确认采用 A 待办工作台、A 原单与明细并排，入口为 `prototype-v3/index.html` 和 `prototype-v3/purchase-review.html`；当前审阅 `prototype-v3/supplier-inquiry.html` 的本次厂家询价页，不据此实现生产业务。
+- 销售 PC 首页与采购校对页已于 2026-10-16 分别确认采用 A 待办工作台、A 原单与明细并排，入口为 `prototype-v3/index.html` 和 `prototype-v3/purchase-review.html`；本次厂家询价、厂家 H5 及销售计价工作台均已于 2026-10-19 确认，入口为 `prototype-v3/supplier-inquiry.html`、`prototype-v3/manufacturer-h5.html` 和 `prototype-v3/pricing-workbench.html`。当前审阅 `prototype-v3/quote-export.html` 的报价预览与导出，不据此实现生产业务或真实文件生成。
 
 ## 工作方式
 
