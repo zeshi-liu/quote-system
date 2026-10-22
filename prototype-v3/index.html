@@ -57,7 +57,7 @@
 </style>
 </head>
 <body>
-  <header class="review"><div class="review-line"><div><div class="eyebrow">QUOTE SYSTEM / PRD V3</div><h1>销售 PC 原型</h1><p>首页、采购校对、厂家询价、H5 和计价已确认；当前审阅报价预览与导出。</p></div><div class="stage-label"><a href="quote-export.html">审阅报价预览与导出 →</a></div></div></header>
+  <header class="review"><div class="review-line"><div><div class="eyebrow">QUOTE SYSTEM / PRD V3</div><h1>销售 PC 原型</h1><p>首页至医院分析已确认；移动工作台已确认；手机采购校对已确认；当前审阅手机厂家询价。</p></div><div class="stage-label"><a href="sales-mini-inquiry.html">审阅手机厂家询价 →</a></div></div></header>
   <div class="preview-label"><strong>已确认 / 待办工作台</strong><span>虚构演示数据 · 不连接真实系统</span></div><div class="app">
     <aside aria-label="销售导航布局预览">
       <div class="brand"><span class="brand-mark">饮</span>饮片报价</div>
@@ -65,9 +65,9 @@
       <button type="button" class="nav-item" data-later="采购单"><svg viewBox="0 0 20 20"><path d="M5 3h10v14H5zM7 7h6M7 10h6M7 13h4"/></svg>采购单</button>
       <button type="button" class="nav-item" data-later="报价单"><svg viewBox="0 0 20 20"><path d="M4 4h12v12H4zM7 7h6M7 10h6M7 13h3"/></svg>报价单</button>
       <div class="nav-title">档案与回款</div>
-      <button type="button" class="nav-item" data-later="历史订单"><svg viewBox="0 0 20 20"><path d="M3 5h14v3H3zM5 8v9h10V8M8 11h4"/></svg>历史订单</button>
-      <button type="button" class="nav-item" data-later="回款台账"><svg viewBox="0 0 20 20"><path d="M3 5h14v11H3zM12 9h5v4h-5zM5 3h9"/></svg>回款台账</button>
-      <button type="button" class="nav-item" data-later="医院分析"><svg viewBox="0 0 20 20"><path d="M3 3v14h14M6 13V9m4 4V6m4 7V3"/></svg>医院分析</button>
+      <a class="nav-item" href="order-archive.html"><svg viewBox="0 0 20 20"><path d="M3 5h14v3H3zM5 8v9h10V8M8 11h4"/></svg>历史订单</a>
+      <a class="nav-item" href="receivables.html"><svg viewBox="0 0 20 20"><path d="M3 5h14v11H3zM12 9h5v4h-5zM5 3h9"/></svg>回款台账</a>
+      <a class="nav-item" href="hospital-analytics.html"><svg viewBox="0 0 20 20"><path d="M3 3v14h14M6 13V9m4 4V6m4 7V3"/></svg>医院分析</a>
       <div class="nav-title">基础资料</div>
       <button type="button" class="nav-item" data-later="商品库与来源批次">商品库与来源批次</button><button type="button" class="nav-item" data-later="医院与采购员">医院与采购员</button><button type="button" class="nav-item" data-later="厂家管理">厂家管理</button>
       <div class="nav-end"><strong>销售员端</strong><br>同一账号 · PC 与小程序协同</div>
@@ -76,7 +76,7 @@
       <div class="utility"><span>销售 / 工作台</span><div class="utility-right"><span><i class="new-dot"></i>新采购单 2</span><span><i class="new-dot"></i>新厂家报价 1</span><span><span class="avatar">林</span>林销售</span></div></div>
       <main>
         <section class="layout-panel" id="layout-a" >
-          <div class="heading"><div><h2>工作台</h2><div class="sub">2026 年 10 月 16 日，周五 · 我负责的订单</div></div><div class="actions"><button type="button" class="mock-button" data-later="历史纸单补录">历史纸单补录</button><a class="mock-button primary" href="purchase-review.html#new">＋ 新建采购单</a></div></div>
+          <div class="heading"><div><h2>工作台</h2><div class="sub">2026 年 10 月 16 日，周五 · 我负责的订单</div></div><div class="actions"><a class="mock-button" href="historical-backfill.html">历史纸单补录</a><a class="mock-button primary" href="purchase-review.html#new">＋ 新建采购单</a></div></div>
           <div class="summary" aria-label="报价处理阶段">
             <div class="metric"><div class="metric-name">待校对</div><div class="metric-value">2</div></div>
             <div class="metric"><div class="metric-name">厂家报价中</div><div class="metric-value">3</div></div>
@@ -101,7 +101,7 @@
       </main>
     </div>
   </div>
-  <footer class="review-note"><span>首页 A 布局已确认 · 其他页面按顺序补齐</span><a href="quote-export.html">当前项：报价预览与导出 →</a></footer><dialog id="future-dialog"><form method="dialog"><h3 id="future-title"></h3><p>该页面将在后续原型中逐项审阅。本次先查看采购单新建与校对，不会提交真实业务数据。</p><button class="mock-button primary">知道了</button></form></dialog>
+  <footer class="review-note"><span>首页 A 布局已确认 · 其他页面按顺序补齐</span><a href="sales-mini-inquiry.html">当前项：手机厂家询价 →</a></footer><dialog id="future-dialog"><form method="dialog"><h3 id="future-title"></h3><p>该页面将在后续原型中逐项审阅。移动工作台已确认；手机采购校对已确认；当前审阅手机厂家询价，不会提交真实业务数据。</p><button class="mock-button primary">知道了</button></form></dialog>
   
   <script>
 (() => {
