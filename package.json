@@ -1,0 +1,16 @@
+{
+  "name": "quote-system", "private": true, "version": "0.1.0",
+  "packageManager": "pnpm@11.25.0", "engines": {"node": ">=22.12"},
+  "scripts": {
+    "test": "tsx --test --test-concurrency=1 apps/api/test/*.test.ts",
+    "test:offline": "TEST_DB_MODE=pglite tsx --test --test-concurrency=1 apps/api/test/*.test.ts",
+    "test:ui": "tsx --test apps/mini/src/*.test.ts apps/supplier-h5/src/*.test.ts",
+    "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && pnpm --dir apps/mini typecheck && pnpm --dir apps/supplier-h5 typecheck",
+    "build": "pnpm --dir apps/api build && pnpm --dir apps/mini build:mp-weixin && pnpm --dir apps/mini build:h5 && pnpm --dir apps/supplier-h5 build",
+    "dev:api": "tsx apps/api/src/main.ts", "db:local": "tsx scripts/local-postgres.ts", "db:offline": "tsx scripts/offline-postgres.ts",
+    "db:seed": "tsx scripts/seed-trial.ts", "dev:mini": "pnpm --dir apps/mini dev:mp-weixin",
+    "dev:mobile-web": "pnpm --dir apps/mini dev:h5", "dev:supplier": "pnpm --dir apps/supplier-h5 dev"
+  },
+  "dependencies": {"@nestjs/common":"^11.1.6","@nestjs/core":"^11.1.6","@nestjs/platform-express":"^11.1.6","@node-rs/argon2":"^2.0.2","decimal.js":"^10.6.0","pg":"^8.16.3","reflect-metadata":"^0.2.2","rxjs":"^7.8.2","zod":"^4.1.5"},
+  "devDependencies": {"@electric-sql/pglite":"0.5.11","@electric-sql/pglite-socket":"0.2.14","@types/express":"^5.0.3","@types/node":"^24.3.0","@types/pg":"^8.15.5","embedded-postgres":"^18.4.0-beta.17","tsx":"^4.20.5","typescript":"^5.9.2"}
+}
