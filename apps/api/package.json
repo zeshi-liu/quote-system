@@ -1,0 +1,1 @@
+{"name":"@quote/api","private":true,"scripts":{"build":"tsc -p tsconfig.build.json && node ../../scripts/copy-migrations.cjs","start":"node dist/apps/api/src/main.js"}}
