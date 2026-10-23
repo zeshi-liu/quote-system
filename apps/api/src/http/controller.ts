@@ -3,24 +3,34 @@ import type { Request,Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AuthService,secretHash } from '../auth/auth';
+import { PcAuthService } from '../auth/pc';
 import { CoreStore } from '../core/store';
 import { PurchaseService } from '../core/purchases';
 import { SupplierService } from '../core/suppliers';
 import { DeliveryService } from '../delivery/service';
 import { PricingService } from '../core/pricing';
+import { ArchiveService } from '../archive/service';
 import { BusinessError,ensure } from '../core/errors';
 @Controller('/api/v1')
 export class ApiController {
- constructor(@Inject(AuthService) readonly auth:AuthService,@Inject(CoreStore) readonly store:CoreStore,@Inject(PurchaseService) readonly purchases:PurchaseService,@Inject(SupplierService) readonly suppliers:SupplierService,@Inject(PricingService) readonly pricing:PricingService,@Inject(DeliveryService) readonly delivery:DeliveryService){}
+ constructor(@Inject(AuthService) readonly auth:AuthService,@Inject(CoreStore) readonly store:CoreStore,@Inject(PurchaseService) readonly purchases:PurchaseService,@Inject(SupplierService) readonly suppliers:SupplierService,@Inject(PricingService) readonly pricing:PricingService,@Inject(DeliveryService) readonly delivery:DeliveryService,@Inject(ArchiveService) readonly archive:ArchiveService,@Inject(PcAuthService) readonly pc:PcAuthService){}
  @All('*path')
  async route(@Req() req:Request,@Res() res:Response){
   const requestId=randomUUID();res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
+  let supplierPurpose=false;
   try{
    const path=req.path.replace(/^\/api\/v1/,'').replace(/\/$/,''),method=req.method,token=req.headers.authorization?.startsWith('Bearer ')?req.headers.authorization.slice(7):'',key=typeof req.headers['idempotency-key']==='string'?req.headers['idempotency-key']:'';
+   const supplierOperation=method==='GET'&&/^\/operations\/[^/]+$/.test(path)&&!!token&&!!(await this.store.db.query('SELECT 1 FROM supplier_sessions WHERE token_hash=$1',[secretHash(token)])).rowCount;
+   supplierPurpose=supplierOperation||['/supplier/session','/h5/sessions','/supplier/quote','/h5/supplier-quote','/h5/supplier-quote/submit'].includes(path);
+   // A same-host browser can send a PC cookie to H5. Explicit supplier purposes
+   // use only their own capability and never authenticate or fall back to PC.
+   if(!supplierPurpose){this.pc.credentials(req);if(path!=='/auth/pc/password-login')await this.pc.guardMutation(req);}
    let status=200;let result:any,match:RegExpMatchArray|null;
    if(path==='/health'&&method==='GET'){await this.store.db.query('SELECT 1');result={status:'ok'};}
    else if((match=path.match(/^\/files\/download\/([^/]+)$/))&&method==='GET'){const file=await this.delivery.download(match[1]);res.setHeader('Content-Type',file.contentType);res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(file.filename));res.status(200).send(file.data);return;}
    else if(path==='/auth/trial/password-login'&&method==='POST')result=await this.auth.trialLogin(req.body,req.ip||'unknown');
+   else if(path==='/auth/csrf'&&method==='GET')result=await this.pc.csrf(req,res);
+   else if(path==='/auth/pc/password-login'&&method==='POST')result=await this.pc.login(req,res);
    else if(path==='/auth/miniapp/login'&&method==='POST')result=await this.auth.miniLogin(req.body,req.ip||'unknown');
    else if(path==='/auth/miniapp/bind-sales'&&method==='POST')result=await this.auth.bindSales(req.body,req.ip||'unknown');
    else if(['/supplier/session','/h5/sessions'].includes(path)&&method==='POST')result=await this.suppliers.exchange(req.body);
@@ -30,14 +40,18 @@ export class ApiController {
     else throw new BusinessError(405,'METHOD_NOT_ALLOWED','不支持此操作');
    }else{
     if((match=path.match(/^\/operations\/([^/]+)$/))&&method==='GET'){
-     const isSupplier=!!(await this.store.db.query('SELECT 1 FROM supplier_sessions WHERE token_hash=$1',[secretHash(token)])).rowCount;
+     const isSupplier=supplierOperation;
      if(isSupplier)result=await this.suppliers.operation(token,match[1]);else{
-      const actor=await this.auth.authenticate(token);result=await this.store.operation(actor,match[1]);
+      const actor=await this.pc.authenticate(req);result=await this.store.operation(actor,match[1]);
      }
     }else{
-     const actor=await this.auth.authenticate(token);
-     if(path==='/auth/me'&&method==='GET')result={id:actor.id,name:actor.name,role:actor.role};
-     else if(path==='/auth/logout'&&method==='POST')result=await this.auth.logout(actor);
+     const actor=await this.pc.authenticate(req);
+     if(path==='/auth/me'&&method==='GET')result={id:actor.id,name:actor.name,role:actor.role,channel:actor.channel};
+     else if(path==='/auth/logout'&&method==='POST'){result=await this.auth.logout(actor);if(actor.channel==='pc')this.pc.clear(req,res);}
+     else if(path==='/sales/order-archive'&&method==='GET')result=await this.archive.list(actor,req.query);
+     else if(path==='/sales/order-archive/hospitals'&&method==='GET')result=await this.archive.hospitals(actor);
+     else if((match=path.match(/^\/sales\/order-archive\/([^/]+)$/))&&method==='GET')result=await this.archive.detail(actor,match[1]);
+     else if(path==='/sales/price-history'&&method==='GET')result=await this.archive.priceHistory(actor,req.query);
      else if(path==='/sales/bootstrap'&&method==='GET')result=await this.purchases.bootstrap(actor);
      else if(path==='/sales/purchase-orders'&&method==='GET')result=await this.purchases.list(actor);
      else if(path==='/sales/purchase-orders'&&method==='POST')result=await this.purchases.create(actor,key,req.body);
@@ -60,6 +74,7 @@ export class ApiController {
    }
    res.status(status).json({data:result,meta:{requestId}});
   }catch(error:any){
+   if(!supplierPurpose&&error instanceof BusinessError&&(error.status===401||error.code==='CHANNEL_FORBIDDEN')&&req.headers.cookie)this.pc.clear(req,res);
    if(error instanceof z.ZodError)res.status(400).json({error:{code:'VALIDATION_FAILED',message:'请检查输入内容',details:error.issues.map(i=>({path:i.path.join('.'),message:i.message}))},meta:{requestId}});
    else if(error instanceof BusinessError)res.status(error.status).json({error:{code:error.code,message:error.message,...(error.details?{details:error.details}:{})},meta:{requestId}});
    else if(['23503','23514','22003'].includes(error.code))res.status(400).json({error:{code:'VALIDATION_FAILED',message:'数据不符合关联或数值约束'},meta:{requestId}});
