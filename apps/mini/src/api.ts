@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
+import { exportJobStorageKey, resolveDownloadUrl } from './delivery-domain';
 import type { Session } from '@quote/contracts';
-import { recordOperation, replayDescriptor, retainPending, type StoredOperation } from './pending';
+import { exportVersionForOperation, recordOperation, replayDescriptor, retainPending, type StoredOperation } from './pending';
 const base = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3000/api/v1').replace(/\/$/,'');
 export const session = ref<Session|null>(uni.getStorageSync('quote-session')||null);
 const pendingStorageKey=(id:string)=>'quote-pending-'+id;
@@ -18,5 +19,31 @@ export async function mutate<T>(label:string,path:string,method:'POST'|'PUT',dat
  const operation=recordOperation(uuid(),label,path,method,data);pending.value=operation;if(session.value)uni.setStorageSync(pendingStorageKey(session.value.user.id),operation);
  return retryOperation<T>();
 }
-export async function checkOperation(){if(!pending.value)return 'none';const r=await request<{status:'committed'|'not_found'}>('/operations/'+pending.value.key);if(r.status==='committed')clearPending();return r.status;}
-export async function retryOperation<T=unknown>(){const operation=replayDescriptor(pending.value);if(!operation)throw new ApiFailure('RETRY_UNAVAILABLE','旧操作缺少原请求内容，请继续核对结果并联系维护人员核实。',true);try{const result=await request<T>(operation.path,operation.method,operation.data,operation.key);clearPending();return result;}catch(e){if(e instanceof ApiFailure&&!retainPending(e.status,e.unknown))clearPending();throw e;}}
+function rememberOperationResult(operation:StoredOperation|null,result:unknown){
+ const versionId=exportVersionForOperation(operation);if(!versionId)return;
+ const receipt=result as {orderId?:unknown;versionId?:unknown;jobId?:unknown}|null;
+ if(!receipt||receipt.versionId!==versionId||typeof receipt.orderId!=='string'||!receipt.orderId.trim()||typeof receipt.jobId!=='string'||!receipt.jobId.trim())throw new ApiFailure('EXPORT_RECEIPT_UNKNOWN','导出已受理但任务回执尚未核实，请保留原操作继续核对。',true);
+ uni.setStorageSync(exportJobStorageKey(receipt.orderId,versionId),receipt.jobId);
+}
+export async function checkOperation(){if(!pending.value)return 'none';const operation=pending.value;const r=await request<{status:'committed'|'not_found';result?:unknown}>('/operations/'+operation.key);if(r.status==='committed'){rememberOperationResult(operation,r.result);clearPending();}return r.status;}
+export async function retryOperation<T=unknown>(){const original=pending.value;const operation=replayDescriptor(original);if(!operation)throw new ApiFailure('RETRY_UNAVAILABLE','旧操作缺少原请求内容，请继续核对结果并联系维护人员核实。',true);try{const result=await request<T>(operation.path,operation.method,operation.data,operation.key);rememberOperationResult(original,result);clearPending();return result;}catch(e){if(e instanceof ApiFailure&&!retainPending(e.status,e.unknown))clearPending();throw e;}}
+
+/** A short-lived read authorization is not an idempotent business mutation. */
+export async function downloadFile(id:string,format:'pdf'|'xlsx',filename:string):Promise<void>{
+ const ticket=await request<{url:string;expiresAt:string}>('/files/'+id+'/download-url','POST',{});
+ const url=resolveDownloadUrl(ticket.url,base);
+ // #ifdef H5
+ const response=await fetch(url);
+ if(!response.ok)throw new ApiFailure('DOWNLOAD_FAILED','文件下载失败，请重新获取下载凭证。',false,response.status);
+ const blob=await response.blob(),objectUrl=URL.createObjectURL(blob),link=document.createElement('a');
+ link.href=objectUrl;link.download=filename;link.rel='noopener';document.body.appendChild(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
+ return;
+ // #endif
+ // #ifndef H5
+ await new Promise<void>((resolve,reject)=>uni.downloadFile({url,success(result){
+  if(result.statusCode!==200){reject(new ApiFailure('DOWNLOAD_FAILED','文件下载失败，请重试。',false,result.statusCode));return;}
+  uni.openDocument({filePath:result.tempFilePath,fileType:format,showMenu:true,success:()=>resolve(),fail:()=>reject(new Error('文件已下载但无法打开，请重试或在浏览器下载。'))});
+ },fail:()=>reject(new Error('文件下载中断，请重新获取文件。'))}));
+ // #endif
+}
