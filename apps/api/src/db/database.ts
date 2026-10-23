@@ -1,5 +1,5 @@
 import { Pool, types, type PoolClient } from 'pg';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 types.setTypeParser(1082, value => value);
@@ -16,15 +16,19 @@ export class Database {
     catch(error) { await client.query('ROLLBACK');throw error; } finally {client.release();}
   }
   async migrate() {
-    const sql=await readFile(resolve(__dirname,'../../migrations/001_core.sql'),'utf8');
-    const checksum=createHash('sha256').update(sql).digest('hex');
+    const directory=resolve(__dirname,'../../migrations');
+    const names=(await readdir(directory)).filter(n=>/^\d+_[a-z0-9_]+\.sql$/.test(n)).sort();
     await this.transaction(async c=>{
       await c.query('SELECT pg_advisory_xact_lock(790123)');
       await c.query('CREATE TABLE IF NOT EXISTS schema_migrations(version text PRIMARY KEY,checksum text NOT NULL)');
-      const old=await c.query("SELECT checksum FROM schema_migrations WHERE version='001_core'");
-      if(old.rowCount){if(old.rows[0].checksum!==checksum)throw new Error('迁移校验和变化，须编写新迁移');return;}
-      await c.query(sql);await c.query("INSERT INTO schema_migrations VALUES('001_core',$1)",[checksum]);
+      for(const name of names){
+        const sql=await readFile(resolve(directory,name),'utf8'),checksum=createHash('sha256').update(sql).digest('hex'),migration=name.slice(0,-4);
+        const old=await c.query('SELECT checksum FROM schema_migrations WHERE version=$1',[migration]);
+        if(old.rowCount){if(old.rows[0].checksum!==checksum)throw new Error('迁移校验和变化，须编写新迁移');continue;}
+        await c.query(sql);await c.query('INSERT INTO schema_migrations VALUES($1,$2)',[migration,checksum]);
+      }
     });
   }
+
   close() { return this.pool.end(); }
 }
