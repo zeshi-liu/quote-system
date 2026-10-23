@@ -10,7 +10,7 @@
 - `packages/contracts/`：各端共用接口类型。
 - [实施计划](docs/implementation-mini-core-v1.md)及[试用与真机准备指南](docs/mini-core-trial-guide.md)。
 
-当前工程已接入“手工采购校对 → 冻结 → 两家厂家 H5 报价 → 表格比价 → 计价保存 → PDF/Excel 导出 → 线下发送登记 → 医院实际确认 → 唯一应收”。私有 COS 适配已编写，真实接入尚待验证；回款编辑、历史补录、分析、OCR 和完整 PC/管理员端仍按后续批次实施。此次开发及验证边界见 [报价交付说明](docs/quote-delivery-trial-guide.md)。用户尚未注册小程序，真实 AppID 绑定与手机预览未完成。本机原生 PostgreSQL 启动异常，离线功能联调使用开发用 PGlite；标准 PostgreSQL 多连接事务须另行验证，不能用离线通过替代。
+当前工程已接入“手工采购校对 → 冻结 → 两家厂家 H5 报价 → 表格比价 → 计价保存 → PDF/Excel 导出 → 线下发送登记 → 医院实际确认 → 唯一应收”。私有 COS 适配已编写，真实接入尚待验证；回款编辑、历史补录、分析、OCR 和完整 PC/管理员端仍按后续批次实施。此次开发及验证边界见 [报价交付说明](docs/quote-delivery-trial-guide.md)。用户正在注册小程序，真实 AppID 绑定与手机预览未完成。本机原生 PostgreSQL 启动异常，离线功能联调使用开发用 PGlite；标准 PostgreSQL 多连接事务须另行验证，不能用离线通过替代。
 
 ## 主要文档
 
