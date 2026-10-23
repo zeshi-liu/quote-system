@@ -11,7 +11,7 @@ import { orderView,purchaseLines } from './read-model';
 import { decimal } from './money';
 export class SupplierService {
  constructor(readonly store:CoreStore,readonly config:Config){}
- private frozen(r:any){ensure(r.revision_status==='frozen'&&['frozen','quote_draft'].includes(r.status),409,'STATE_CONFLICT','须使用当前已冻结采购修订');}
+ private frozen(r:any){ensure(r.revision_status==='frozen'&&['frozen','quote_draft','quote_exported','quote_sent'].includes(r.status),409,'STATE_CONFLICT','须使用当前已冻结采购修订');}
  async createTask(actor:Actor,key:string,revisionId:string,input:unknown){
   const value=z.object({expectedVersion:version,slotNo:z.union([z.literal(1),z.literal(2)]),manufacturerId:uuid}).strict().parse(input);
   const orderId=await new PurchaseService(this.store).orderIdForRevision(revisionId);
@@ -25,8 +25,10 @@ export class SupplierService {
  private async invalidate(c:Client,taskId:string){
   const submissions=(await c.query("SELECT id FROM supplier_quote_submissions WHERE task_id=$1 AND status='current'",[taskId])).rows.map(s=>s.id);
   if(!submissions.length)return;
-  await c.query("UPDATE quote_versions SET row_version=row_version+1 WHERE id IN(SELECT ql.version_id FROM quote_lines ql WHERE ql.base_supplier_quote_line_id IN(SELECT id FROM supplier_quote_lines WHERE submission_id=ANY($1::uuid[])) OR EXISTS(SELECT 1 FROM jsonb_array_elements(ql.adopted_supplier_snapshot) snapshot WHERE snapshot->>'supplierQuoteLineId' IN(SELECT id::text FROM supplier_quote_lines WHERE submission_id=ANY($1::uuid[]))))",[submissions]);
-  await c.query('UPDATE quote_lines SET final_confirmed=false,recommended_price=NULL WHERE base_supplier_quote_line_id IN(SELECT id FROM supplier_quote_lines WHERE submission_id=ANY($1::uuid[]))',[submissions]);
+  const affected=`SELECT ql.version_id FROM quote_lines ql WHERE (ql.adopted_kind='priced' AND ql.base_supplier_quote_line_id IN(SELECT id FROM supplier_quote_lines WHERE submission_id=ANY($1::uuid[]))) OR (ql.adopted_kind='missing' AND EXISTS(SELECT 1 FROM jsonb_array_elements(ql.adopted_supplier_snapshot) snapshot WHERE snapshot->>'supplierQuoteLineId' IN(SELECT id::text FROM supplier_quote_lines WHERE submission_id=ANY($1::uuid[]))))`;
+  await c.query("UPDATE quote_versions SET use_invalidated_at=COALESCE(use_invalidated_at,$2),row_version=row_version+1 WHERE first_exported_at IS NOT NULL AND status IN('exported','sent') AND id IN("+affected+")",[submissions,this.store.clock()]);
+  await c.query("UPDATE quote_versions SET row_version=row_version+1 WHERE status='draft' AND id IN("+affected+")",[submissions]);
+  await c.query("UPDATE quote_lines SET final_confirmed=false,recommended_price=NULL WHERE version_id IN(SELECT id FROM quote_versions WHERE status='draft') AND base_supplier_quote_line_id IN(SELECT id FROM supplier_quote_lines WHERE submission_id=ANY($1::uuid[]))",[submissions]);
   await c.query("UPDATE supplier_quote_submissions SET status='superseded' WHERE task_id=$1 AND status='current'",[taskId]);
  }
  async link(actor:Actor,key:string,taskId:string,mode:'generate'|'regenerate'|'requote',input:unknown){
@@ -68,7 +70,7 @@ export class SupplierService {
  async capability(c:Client,token:string){
   const ref=(await c.query('SELECT r.purchase_order_id FROM supplier_sessions ss JOIN supplier_links l ON l.id=ss.link_id JOIN supplier_tasks t ON t.id=l.task_id JOIN purchase_order_revisions r ON r.id=t.revision_id WHERE ss.token_hash=$1',[secretHash(token||'')])).rows[0];ensure(ref,410,'LINK_INVALID','填写会话无效');
   await c.query('SELECT id FROM purchase_orders WHERE id=$1 FOR SHARE',[ref.purchase_order_id]);
-  const r=(await c.query('SELECT ss.link_id,ss.expires_at AS session_expires,l.status AS link_status,l.expires_at AS link_expires,l.task_id,t.revision_id,t.manufacturer_id,t.status AS task_status,m.name AS manufacturer_name,r.purchase_order_id,r.revision_no,r.status AS revision_status,o.received_date,o.current_revision_no FROM supplier_sessions ss JOIN supplier_links l ON l.id=ss.link_id JOIN supplier_tasks t ON t.id=l.task_id JOIN manufacturers m ON m.id=t.manufacturer_id JOIN purchase_order_revisions r ON r.id=t.revision_id JOIN purchase_orders o ON o.id=r.purchase_order_id WHERE ss.token_hash=$1',[secretHash(token||'')])).rows[0];
+  const r=(await c.query('SELECT ss.link_id,ss.expires_at AS session_expires,l.status AS link_status,l.expires_at AS link_expires,l.task_id,t.revision_id,t.manufacturer_id,t.status AS task_status,m.name AS manufacturer_name,r.purchase_order_id,r.revision_no,r.status AS revision_status,o.received_date,o.current_revision_no,o.status AS order_status FROM supplier_sessions ss JOIN supplier_links l ON l.id=ss.link_id JOIN supplier_tasks t ON t.id=l.task_id JOIN manufacturers m ON m.id=t.manufacturer_id JOIN purchase_order_revisions r ON r.id=t.revision_id JOIN purchase_orders o ON o.id=r.purchase_order_id WHERE ss.token_hash=$1',[secretHash(token||'')])).rows[0];
   ensure(r&&r.link_status!=='revoked'&&r.session_expires>this.store.clock()&&r.link_expires>this.store.clock()&&r.task_status!=='cancelled'&&r.revision_status==='frozen'&&r.revision_no===r.current_revision_no,410,'LINK_INVALID','填写入口已过期或被重新生成，请联系销售');return r;
  }
  private async form(c:Client,r:any){
@@ -85,6 +87,7 @@ export class SupplierService {
    const digest=createHash('sha256').update(stable({operation:'supplier.submit',input:value})).digest('hex');
    const old=(await c.query("SELECT * FROM operation_requests WHERE actor_type='supplier' AND actor_id=$1 AND idempotency_key=$2",[cap.link_id,key])).rows[0];
    if(old){ensure(old.content_hash===digest,409,'IDEMPOTENCY_KEY_REUSED','请求标识已用于不同报价');return old.result;}
+   ensure(!['completed','voided'].includes(cap.order_status),409,'ORDER_COMPLETED','订单已完成或作废，不再接受厂家提交');
    ensure(value.validUntil>=today(this.store.clock()),400,'VALIDATION_FAILED','报价有效至日不可早于今天');
    ensure(cap.link_status==='active'&&cap.task_status!=='submitted',409,'ALREADY_SUBMITTED','已提交，请查看回执或联系销售重新询价');
    const frozen=await purchaseLines(c,cap.revision_id),ids=value.lines.map(l=>l.purchaseLineId);
