@@ -2,3 +2,11 @@
 **/.DS_Store
 output/
 .superpowers/
+node_modules/
+**/dist/
+**/unpackage/
+.env
+.env.*
+!.env.example
+.local/
+*.tsbuildinfo
