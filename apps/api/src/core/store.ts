@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { Database } from '../db/database';
 import type { Actor } from '../auth/auth';
+import {internalRole,sessionIdleMs} from '../auth/auth';
 import { ensure, missing, conflict } from './errors';
 import { uuid } from './validation';
 export type Client=PoolClient;
@@ -9,20 +10,23 @@ export const stable=(v:any):string=>JSON.stringify(v,(_k,value)=>value&&typeof v
 export class CoreStore {
  constructor(readonly db:Database,readonly clock=()=>new Date()){}
  async root(c:Client,actor:Actor,id:string,write=false) {
+   await this.active(c,actor);
+   if(write)ensure(actor.role==='salesperson',403,'ROLE_FORBIDDEN','管理员仅可只读查看业务');
    const reference=(await c.query('SELECT hospital_id FROM purchase_orders WHERE id=$1',[id])).rows[0];if(!reference)throw missing();
    await c.query('SELECT id FROM hospitals WHERE id=$1 FOR SHARE',[reference.hospital_id]);
    const locked=(await c.query(`SELECT id FROM purchase_orders WHERE id=$1 ${write?'FOR UPDATE':'FOR SHARE'}`,[id])).rows[0];if(!locked)throw missing();
    const row=(await c.query('SELECT o.*,h.name AS hospital_name,h.sales_user_id AS hospital_owner,r.id AS revision_id,r.revision_no,r.status AS revision_status FROM purchase_orders o JOIN hospitals h ON h.id=o.hospital_id JOIN purchase_order_revisions r ON r.purchase_order_id=o.id AND r.revision_no=o.current_revision_no WHERE o.id=$1',[id])).rows[0];
-   if(!row||(row.sales_user_id!==actor.id&&row.hospital_owner!==actor.id))throw missing();
+   if(!row||!(actor.role==='admin'&&actor.channel==='pc')&&(row.sales_user_id!==actor.id&&row.hospital_owner!==actor.id))throw missing();
    if(write)ensure(row.sales_user_id===actor.id,403,'ORDER_READ_ONLY','旧订单仅订单负责销售可操作');
    return row;
  }
  checkVersion(actual:number,expected:number) {if(actual!==expected)throw conflict('已被其他操作更新，请重新加载核对');}
  async bump(c:Client,id:string){await c.query('UPDATE purchase_orders SET row_version=row_version+1 WHERE id=$1',[id]);}
- async audit(c:Client,orderId:string,actorId:string,action:string,details:unknown){await c.query('INSERT INTO audit_records(purchase_order_id,actor_id,action,details,created_at) VALUES($1,$2,$3,$4,$5)',[orderId,actorId,action,JSON.stringify(details),this.clock()]);}
+ async audit(c:Client,orderId:string,actorId:string,action:string,details:unknown){await c.query(`INSERT INTO audit_records(purchase_order_id,actor_id,action,details,created_at,actor_name_snapshot) VALUES($1,$2,$3,$4,$5,COALESCE((SELECT name FROM users WHERE id=$2),(SELECT m.name FROM supplier_links l JOIN supplier_tasks t ON t.id=l.task_id JOIN manufacturers m ON m.id=t.manufacturer_id WHERE l.id=$2)))`,[orderId,actorId,action,JSON.stringify(details),this.clock()]);}
  async active(c:Client,actor:Actor){
-   const user=(await c.query('SELECT active FROM users WHERE id=$1 FOR SHARE',[actor.id])).rows[0];ensure(user?.active,401,'SESSION_EXPIRED','账号已停用');
-   const session=(await c.query('SELECT revoked_at,expires_at FROM auth_sessions WHERE id=$1 FOR SHARE',[actor.sessionId])).rows[0];ensure(session&&!session.revoked_at&&session.expires_at>this.clock(),401,'SESSION_EXPIRED','会话已失效');
+   const user=(await c.query('SELECT active,role,auth_version FROM users WHERE id=$1 FOR SHARE',[actor.id])).rows[0];ensure(user?.active,401,'SESSION_EXPIRED','账号已停用');
+   const session=(await c.query('SELECT user_id,channel,last_seen_at,revoked_at,expires_at,issued_role,auth_version FROM auth_sessions WHERE id=$1 FOR SHARE',[actor.sessionId])).rows[0],now=this.clock();ensure(session&&session.user_id===actor.id&&session.channel===actor.channel&&session.issued_role===actor.role&&session.auth_version===user.auth_version&&user.role===actor.role&&!session.revoked_at&&session.expires_at>now&&now.getTime()-session.last_seen_at.getTime()<sessionIdleMs(session.channel),401,'SESSION_EXPIRED','会话已失效');
+   ensure(internalRole(user.role,session.channel),403,'ROLE_FORBIDDEN','当前角色不能使用此内部端');
  }
  async authorizeResult(c:Client,actor:Actor,result:any){
    let orderId=result?.orderId||(result?.hospitalName?result.id:null);
@@ -36,6 +40,7 @@ export class CoreStore {
    uuid.parse(key);const digest=createHash('sha256').update(stable({operation,orderId,input})).digest('hex');
    try{return await this.db.transaction(async c=>{
      await this.active(c,actor);
+     ensure(actor.role==='salesperson',403,'ROLE_FORBIDDEN','管理员仅可只读查看业务');
      const root=orderId?await this.root(c,actor,orderId,true):null;
      const old=(await c.query("SELECT * FROM operation_requests WHERE actor_type='user' AND actor_id=$1 AND idempotency_key=$2",[actor.id,key])).rows[0];
      if(old){ensure(old.content_hash===digest,409,'IDEMPOTENCY_KEY_REUSED','同一请求标识不能用于不同内容');await this.authorizeResult(c,actor,old.result);return old.result;}
