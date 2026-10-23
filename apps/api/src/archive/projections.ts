@@ -18,8 +18,13 @@ const fieldLabels:Record<string,string>={lineCount:'采购行数',slot:'厂家�
 const pricingChange=z.object({purchaseLineId:uuid,baseSupplierQuoteLineId:uuid.nullable(),selectionMode:z.enum(['auto','manual']),markupMethod:z.enum(['fixed','percent','multiplier']).nullable(),parameterValue:amount.nullable(),finalPrice:amount.nullable(),finalConfirmed:z.boolean(),lossReason:z.string().max(500),publicRemark:z.string().max(500).optional()});
 const supplierCell=z.object({taskId:z.string().max(100),manufacturerId:z.string().max(100),manufacturerName:z.string().max(200),state:z.enum(['quoted','unavailable','pending','expired','requote','cancelled']),price:amount.nullable(),validUntil:date.nullable(),supplierQuoteLineId:uuid.nullable()});
 export function supplierSnapshot(input:unknown):QuoteCell[]{return Array.isArray(input)?input.flatMap(value=>{const parsed=supplierCell.safeParse(value);return parsed.success?[parsed.data]:[];}):[];}
+function summaryValue(key:string,input:string|number):string{
+ const value=String(input).slice(0,500);
+ if((key==='actual'||key==='recordedAt')&&z.iso.datetime({offset:true}).safeParse(value).success)return new Date(new Date(value).getTime()+8*3600000).toISOString().replace('T',' ').slice(0,19)+' 北京时间';
+ return value;
+}
 export function auditDto(row:any):ArchiveAudit{
- const details=row.details||{},parts=(summaryKeys[row.action]||[]).flatMap(key=>typeof details[key]==='string'||typeof details[key]==='number'?[`${fieldLabels[key]}：${String(details[key]).slice(0,500)}`]:[]);
+ const details=row.details||{},parts=(summaryKeys[row.action]||[]).flatMap(key=>typeof details[key]==='string'||typeof details[key]==='number'?[`${fieldLabels[key]}：${summaryValue(key,details[key])}`]:[]);
  const version=uuid.safeParse(details.versionId||details.draftId),changes:DraftLineInput[]=row.action==='pricing.save'&&Array.isArray(details.lines)?details.lines.flatMap((line:unknown)=>{const parsed=pricingChange.safeParse(line);return parsed.success?[parsed.data]:[];}):[];
  return {id:row.id,action:row.action,actorId:row.actor_id,actorName:row.actor_name_snapshot??row.profile_name??'未知操作人',actorNameSource:row.actor_name_snapshot!=null?'snapshot':row.profile_name?'current_profile':'unknown',createdAt:new Date(row.created_at).toISOString(),summary:[auditLabels[row.action]||'历史操作',...parts].join('；'),...(version.success?{versionId:version.data}:{}),...(row.action==='pricing.save'?{pricingChanges:changes}:{})};
 }
