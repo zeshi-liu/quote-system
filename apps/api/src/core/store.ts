@@ -39,6 +39,7 @@ export class CoreStore {
      const root=orderId?await this.root(c,actor,orderId,true):null;
      const old=(await c.query("SELECT * FROM operation_requests WHERE actor_type='user' AND actor_id=$1 AND idempotency_key=$2",[actor.id,key])).rows[0];
      if(old){ensure(old.content_hash===digest,409,'IDEMPOTENCY_KEY_REUSED','同一请求标识不能用于不同内容');await this.authorizeResult(c,actor,old.result);return old.result;}
+     if(root)ensure(!['completed','voided'].includes(root.status)||operation==='delivery.confirm',409,'ORDER_COMPLETED','订单已完成或作废，仅可查看');
      const result=await action(c,root);
      const safe:any=result&&typeof result==='object'?{...result}:result;
      if(safe?.url){delete safe.url;safe.originalUnavailable=true;}
