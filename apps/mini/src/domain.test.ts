@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recommendation, restoreMarkup, validPositive } from './domain';
-import { recordOperation, replayDescriptor, retainPending } from './pending';
+import { canManageOrder, pricingInputs, recommendation, restoreMarkup, validPositive } from './domain';
+import { committedOperationNotice, recordOperation, replayDescriptor, retainPending } from './pending';
 import { retainPending as retainSupplierPending } from '../../supplier-h5/src/pending';
 test('currency recommendations round once using exact decimals',()=>{
  assert.equal(recommendation('0.10','fixed','0.20'),'0.30');
@@ -39,4 +39,23 @@ test('auth and link failure on a retry cannot discard the original unknown opera
   for(const status of [401,403,410,503,408,undefined])assert.equal(retain(status,false),true,String(status));
   assert.equal(retain(409,true),true);assert.equal(retain(400,false),false);assert.equal(retain(409,false),false);
  }
+});
+
+test('completed and voided orders cannot resume inquiry or pricing even when ownership is writable',()=>{
+ for(const status of ['completed','voided'])assert.equal(canManageOrder({status,writable:true}),false);
+ assert.equal(canManageOrder({status:'quote_draft',writable:false}),false);
+ assert.equal(canManageOrder({status:'quote_draft',writable:true}),true);
+});
+test('pricing save keeps public line remarks separate from private loss reasons',()=>{
+ const lines=[{purchaseLineId:'line',baseSupplierQuoteLineId:null,selectionMode:'auto' as const,markupMethod:null,parameterValue:null,finalPrice:'10.00',finalConfirmed:true,lossReason:'内部低价审批',publicRemark:'医院可见备注'}];
+ const input=pricingInputs(lines)[0];
+ assert.equal(input.publicRemark,'医院可见备注');assert.equal(input.lossReason,'内部低价审批');
+ assert.equal(pricingInputs([{...lines[0],publicRemark:undefined}])[0].publicRemark,'');
+});
+
+test('recovered export acceptance asks to check file generation rather than claiming task success',()=>{
+ const operation=recordOperation('key','导出报价 PDF','/quotes/quote-id/versions/version-id/export','POST',{});
+ const notice=committedOperationNotice(operation);
+ assert.match(notice,/已受理/);assert.match(notice,/核对文件生成结果/);assert.doesNotMatch(notice,/成功/);
+ assert.match(committedOperationNotice({...operation,path:'/sales/purchase-orders'}),/操作已成功/);
 });
