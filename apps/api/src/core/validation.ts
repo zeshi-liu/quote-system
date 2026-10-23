@@ -8,7 +8,7 @@ export const purchaseLine=z.object({id:uuid.optional(),name:z.string().trim().mi
 export const purchaseLines=z.array(purchaseLine).min(1).max(100);
 export const supplierLine=z.object({purchaseLineId:uuid,status:z.enum(['quoted','unavailable']),unitPrice:positive.nullable()}).strict().refine(v=>v.status==='quoted'?v.unitPrice!==null:v.unitPrice===null,'可供货须报价，缺货时价格须为空');
 export const supplierInput=z.object({validUntil:date,lines:z.array(supplierLine).min(1).max(100)}).strict();
-export const draftLine=z.object({purchaseLineId:uuid,baseSupplierQuoteLineId:uuid.nullable(),selectionMode:z.enum(['auto','manual']),markupMethod:z.enum(['fixed','percent','multiplier']).nullable(),parameterValue:amount.nullable(),finalPrice:positive.nullable(),finalConfirmed:z.boolean(),lossReason:z.string().trim().max(500)}).strict();
+export const draftLine=z.object({publicRemark:z.string().trim().max(500).optional(),purchaseLineId:uuid,baseSupplierQuoteLineId:uuid.nullable(),selectionMode:z.enum(['auto','manual']),markupMethod:z.enum(['fixed','percent','multiplier']).nullable(),parameterValue:amount.nullable(),finalPrice:positive.nullable(),finalConfirmed:z.boolean(),lossReason:z.string().trim().max(500)}).strict();
 export const version=z.number().int().positive();
 export const reason=z.string().trim().min(1).max(500);
 export const today=(now:Date)=>new Date(now.getTime()+8*3600000).toISOString().slice(0,10);
