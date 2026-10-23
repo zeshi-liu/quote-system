@@ -2,7 +2,9 @@ export type DecimalString = string;
 export type MarkupMethod = 'fixed' | 'percent' | 'multiplier';
 export type SupplyState = 'quoted' | 'unavailable' | 'pending' | 'expired' | 'requote' | 'cancelled';
 export interface User { id: string; name: string; role: 'salesperson' | 'admin' | 'hospital' }
-export interface Session { authState: 'authenticated'; token: string; user: User; expiresAt: string; channel: 'mini' | 'trial' }
+export interface Session { authState: 'authenticated'; token: string; user: User; expiresAt: string; channel: 'mini' | 'trial' | 'pc' }
+/** PC credentials stay in HttpOnly cookies; this is the only PC login response. */
+export interface PcSession {authState:'authenticated';user:User;expiresAt:string;channel:'pc';csrf:string;}
 export interface Hospital { id: string; name: string; paymentTermDays: number; purchasers: {id: string; name: string}[] }
 export interface Manufacturer { id: string; name: string }
 export interface PurchaseInput { id?: string; name: string; spec: string; quantity: string; checked: boolean }
@@ -22,3 +24,4 @@ export interface SupplierForm { manufacturerName: string; revisionNo: number; re
 export interface ApiError { code: string; message: string; details?: unknown }
 export interface ApiEnvelope<T> { data: T; meta: {requestId: string} }
 export * from './delivery';
+export * from './archive';
