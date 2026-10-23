@@ -26,8 +26,8 @@ export async function comparison(c:Client,r:any,now:Date):Promise<Comparison>{
  });
  return {orderId:r.id,orderVersion:r.row_version,submittedCount:tasks.filter(complete).length,lines:result};
 }
-export async function draftView(c:Client,r:any,now:Date):Promise<Draft>{
- const version=(await c.query("SELECT v.* FROM quotes q JOIN quote_versions v ON v.quote_id=q.id WHERE q.revision_id=$1 AND v.status='draft'",[r.revision_id])).rows[0];ensure(version,404,'DRAFT_NOT_FOUND','尚未进入计价');
+export async function draftView(c:Client,r:any,now:Date,versionId?:string):Promise<Draft>{
+ const version=(await c.query("SELECT v.* FROM quotes q JOIN quote_versions v ON v.quote_id=q.id WHERE q.revision_id=$1 AND v.status='draft' AND ($2::uuid IS NULL OR v.id=$2)",[r.revision_id,versionId||null])).rows[0];ensure(version,404,'DRAFT_NOT_FOUND','尚未进入计价');
  const real=await comparison(c,r,now);
  const rows=(await c.query(`SELECT ql.*,m.name AS manufacturer_name,s.valid_until,s.status AS submission_status,t.status AS task_status FROM quote_lines ql JOIN purchase_order_lines pl ON pl.id=ql.purchase_line_id LEFT JOIN supplier_quote_lines sl ON sl.id=ql.base_supplier_quote_line_id LEFT JOIN supplier_quote_submissions s ON s.id=sl.submission_id LEFT JOIN supplier_tasks t ON t.id=s.task_id LEFT JOIN manufacturers m ON m.id=t.manufacturer_id WHERE ql.version_id=$1 ORDER BY pl.position`,[version.id])).rows;
  const lines:DraftLine[]=rows.map(row=>{
@@ -36,7 +36,7 @@ export async function draftView(c:Client,r:any,now:Date):Promise<Draft>{
    const snapshot=row.adopted_supplier_snapshot as QuoteCell[],kind=row.adopted_kind as DraftLine['kind'];
    const signature=(cells:QuoteCell[])=>JSON.stringify(cells.map(v=>[v.taskId,v.state,v.supplierQuoteLineId,v.validUntil]));
    const supplyValid=kind==='priced'?baseValid:kind==='missing'&&snapshot.length===2&&snapshot.every(old=>old.state==='unavailable'&&live.cells.some(next=>next.state==='unavailable'&&next.supplierQuoteLineId===old.supplierQuoteLineId));
-   return {purchaseLineId:row.purchase_line_id,name:live.name,spec:live.spec,quantity:live.quantity,kind,baseSupplierQuoteLineId:row.base_supplier_quote_line_id,baseManufacturerName:row.manufacturer_name||null,basePrice:row.base_price,baseValid,supplyValid,adoptedLowestPrice:row.adopted_lowest_price,hasNewSupplierData:signature(snapshot)!==signature(live.cells),selectionMode:row.selection_mode,markupMethod:row.markup_method,parameterValue:row.parameter_value,recommendedPrice:baseValid?row.recommended_price:null,finalPrice:row.final_price,finalConfirmed:row.final_confirmed,lossReason:row.loss_reason,amount:kind==='priced'&&row.final_price?lineAmount(live.quantity,row.final_price):null};
+   return {publicRemark:row.public_remark,purchaseLineId:row.purchase_line_id,name:live.name,spec:live.spec,quantity:live.quantity,kind,baseSupplierQuoteLineId:row.base_supplier_quote_line_id,baseManufacturerName:row.manufacturer_name||null,basePrice:row.base_price,baseValid,supplyValid,adoptedLowestPrice:row.adopted_lowest_price,hasNewSupplierData:signature(snapshot)!==signature(live.cells),selectionMode:row.selection_mode,markupMethod:row.markup_method,parameterValue:row.parameter_value,recommendedPrice:baseValid?row.recommended_price:null,finalPrice:row.final_price,finalConfirmed:row.final_confirmed,lossReason:row.loss_reason,amount:kind==='priced'&&row.final_price?lineAmount(live.quantity,row.final_price):null};
  });
  const dates=rows.filter(row=>row.base_supplier_quote_line_id&&row.submission_status==='current'&&row.task_status==='submitted'&&row.valid_until>=today(now)).map(row=>row.valid_until as string).sort();
  const maxValidUntil=dates[0]||null,amounts=lines.flatMap(l=>l.amount?[l.amount]:[]);
