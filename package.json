@@ -9,9 +9,9 @@
   "scripts": {
     "test": "tsx --test --test-concurrency=1 apps/api/test/*.test.ts",
     "test:offline": "TEST_DB_MODE=pglite tsx --test --test-concurrency=1 apps/api/test/*.test.ts",
-    "test:ui": "tsx --test apps/mini/src/*.test.ts apps/supplier-h5/src/*.test.ts",
-    "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && pnpm --dir apps/mini typecheck && pnpm --dir apps/supplier-h5 typecheck",
-    "build": "pnpm --dir apps/api build && pnpm --dir apps/mini build:mp-weixin && pnpm --dir apps/mini build:h5 && pnpm --dir apps/supplier-h5 build",
+    "test:ui": "tsx --test apps/mini/src/*.test.ts apps/supplier-h5/src/*.test.ts apps/pc/src/*.test.ts packages/archive-client/src/*.test.ts",
+    "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && pnpm --dir apps/mini typecheck && pnpm --dir apps/supplier-h5 typecheck && pnpm --dir apps/pc typecheck",
+    "build": "pnpm --dir apps/api build && pnpm --dir apps/mini build:mp-weixin && pnpm --dir apps/mini build:h5 && pnpm --dir apps/supplier-h5 build && pnpm --dir apps/pc build",
     "dev:api": "tsx apps/api/src/main.ts",
     "db:local": "tsx scripts/local-postgres.ts",
     "db:offline": "tsx scripts/offline-postgres.ts",
@@ -20,7 +20,8 @@
     "dev:mobile-web": "pnpm --dir apps/mini dev:h5",
     "dev:supplier": "pnpm --dir apps/supplier-h5 dev",
     "dev:worker": "tsx scripts/delivery-worker.ts",
-    "start:worker": "node --max-old-space-size=192 apps/api/dist/apps/api/src/delivery/worker-main.js"
+    "start:worker": "node --max-old-space-size=192 apps/api/dist/apps/api/src/delivery/worker-main.js",
+    "dev:pc": "pnpm --dir apps/pc dev"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",
