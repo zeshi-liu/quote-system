@@ -1,0 +1,1 @@
+{"name":"@quote/pc","private":true,"scripts":{"dev":"vite --host 0.0.0.0 --port 5176","build":"vite build","typecheck":"vue-tsc --noEmit"},"dependencies":{"@quote/contracts":"workspace:*","@quote/archive-client":"workspace:*","vue":"3.5.22"},"devDependencies":{"@vitejs/plugin-vue":"5.0.5","vite":"5.2.8","vue-tsc":"^3.1.0"}}
