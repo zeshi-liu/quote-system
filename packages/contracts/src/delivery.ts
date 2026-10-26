@@ -1,8 +1,10 @@
-/** Public hospital document: no supplier costs, loss reasons or internal identifiers. */
+/** Public hospital document: no supplier costs, loss reasons or private storage locators. */
 export interface QuoteDocument {
  schemaVersion:1; quoteNo:string; versionNo:number; hospitalName:string; sellerName:string;
  quoteDate:string; salespersonName:string; contact:string; validUntil:string|null;
  taxNote:string; notes:string;
+ template?:{id:string;version:number};
+ logo?:{fileId:string;sha256:string;mimeType:'image/png'|'image/jpeg';byteSize:number};
  lines:{position:number;name:string;spec:string;unit:'kg';quantity:string;status:'priced'|'missing';unitPrice:string|null;amount:string|null;remark:string}[];
  total:string|null;
 }

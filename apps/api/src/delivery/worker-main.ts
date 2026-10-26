@@ -19,7 +19,7 @@ export async function cleanupObjects(db:Database,storage:ObjectStorage,now=new D
 async function main(){
  const config=configuration(),db=new Database(config.databaseUrl),storage=createStorage(),store=new ExportStore(new CoreStore(db)),abort=new AbortController();
  if(!['local','cos'].includes(process.env.FILE_STORAGE_DRIVER||''))throw new Error('worker 必须配置私有文件存储');
- await db.migrate();process.once('SIGTERM',()=>abort.abort());process.once('SIGINT',()=>abort.abort());let cleanupAt=0;
+ await db.migrate({verifyOnly:config.production});process.once('SIGTERM',()=>abort.abort());process.once('SIGINT',()=>abort.abort());let cleanupAt=0;
  try{while(!abort.signal.aborted){try{await runOnce(store,storage,(document,format)=>renderInChild(document,format,{signal:abort.signal}));if(Date.now()-cleanupAt>3600000){await cleanupObjects(db,storage);cleanupAt=Date.now();}}catch{console.error('export_worker_iteration_failed');}if(!abort.signal.aborted)await sleep(2000,undefined,{signal:abort.signal}).catch(()=>{});}}
  finally{await db.close();}
 }

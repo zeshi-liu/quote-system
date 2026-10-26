@@ -2,11 +2,14 @@ import type { QuoteDocument,ExportFormat } from '../../../../packages/contracts/
 import { CoreStore,type Client } from '../core/store';
 import { assertUsable,cancelAttempt,deliveryRoot } from './domain';
 import { BusinessError } from '../core/errors';
+import {resolveQuoteLogo} from './template';
+import type {ObjectStorage} from './storage';
 export interface WorkerClaim {jobId:string;exportId:string;versionId:string;generation:number;document:QuoteDocument;format:ExportFormat;objectKey:string;deadline:string;}
 export interface BoundFile {objectKey:string;filename:string;sha256:string;size:number;contentType:string;}
 const objectKey=(jobId:string,generation:number,format:string)=>`exports/${jobId}/${generation}/quote.${format}`;
 export class ExportStore {
  constructor(readonly store:CoreStore){}
+ resolveLogo(document:QuoteDocument,storage:ObjectStorage){return resolveQuoteLogo(this.store.db,storage,document);}
  private async load(c:Client,jobId:string){return (await c.query('SELECT j.*,a.version_id,a.order_id,a.revision_id,a.generation AS export_generation,a.input_version,a.document,a.basis_evidence,a.snapshot_hash,a.format,a.deadline,a.created_at AS prepared_at,a.state AS export_state FROM export_jobs j JOIN quote_export_attempts a ON a.id=j.export_id WHERE j.id=$1',[jobId])).rows[0];}
  private async valid(c:Client,j:any,r:any,now:Date){
   const v=(await c.query('SELECT * FROM quote_versions WHERE id=$1',[j.version_id])).rows[0];

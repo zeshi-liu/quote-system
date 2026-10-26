@@ -3,9 +3,15 @@ import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 types.setTypeParser(1082, value => value);
+function configuredPoolMax(){
+  if(process.env.DEV_PGLITE==='true')return 1;
+  const raw=process.env.DB_POOL_MAX;
+  if(raw!==undefined){if(!/^[1-9]\d?$/.test(raw)||Number(raw)>50)throw new Error('DB_POOL_MAX 必须为 1–50 的整数');return Number(raw);}
+  return process.env.NODE_ENV==='production'?5:8;
+}
 export class Database {
   readonly pool: Pool;
-  constructor(url: string, max=process.env.DEV_PGLITE==='true'?1:8, schema?:string) {
+  constructor(url: string, max=configuredPoolMax(), schema?:string) {
     if(schema&&!/^[a-z][a-z0-9_]{0,62}$/.test(schema))throw new Error('无效的数据库 schema');
     this.pool = new Pool({connectionString:url,max,connectionTimeoutMillis:5000,...(schema?{options:'-c search_path='+schema+',public'}:{})});
   }
@@ -15,7 +21,23 @@ export class Database {
     try { await client.query('BEGIN');await client.query("SET LOCAL lock_timeout='5s'");await client.query("SET LOCAL statement_timeout='15s'");const value=await action(client);await client.query('COMMIT');return value; }
     catch(error) { await client.query('ROLLBACK');throw error; } finally {client.release();}
   }
-  async migrate() {
+  async verifyMigrations() {
+    const directory=resolve(__dirname,'../../migrations');
+    const names=(await readdir(directory)).filter(n=>/^\d+_[a-z0-9_]+\.sql$/.test(n)).sort();
+    await this.transaction(async c=>{
+      await c.query('SET TRANSACTION READ ONLY');
+      const table=await c.query("SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname=current_schema() AND tablename='schema_migrations'");
+      if(!table.rowCount)throw new Error('数据库尚未执行迁移，请使用独立迁移命令后启动服务');
+      const applied=new Map((await c.query('SELECT version,checksum FROM schema_migrations')).rows.map(r=>[r.version,r.checksum]));
+      for(const name of names){
+        const version=name.slice(0,-4),checksum=createHash('sha256').update(await readFile(resolve(directory,name),'utf8')).digest('hex');
+        if(!applied.has(version))throw new Error('数据库缺少迁移 '+version+'，请先执行独立迁移');
+        if(applied.get(version)!==checksum)throw new Error('迁移校验和变化，须编写新迁移');
+      }
+    });
+  }
+  async migrate(options:{verifyOnly?:boolean}={}) {
+    if(options.verifyOnly)return this.verifyMigrations();
     const directory=resolve(__dirname,'../../migrations');
     const names=(await readdir(directory)).filter(n=>/^\d+_[a-z0-9_]+\.sql$/.test(n)).sort();
     await this.transaction(async c=>{

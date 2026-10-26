@@ -3,6 +3,8 @@ import {computed,onMounted,onBeforeUnmount,reactive,ref,watch} from 'vue';
 import type {ArchiveFilters,ArchiveOrder} from '@quote/contracts';
 import {ArchiveController,archiveFilterForm,isFiltersDirty,restoreAppliedFilters,archivePanels,archiveTabs,archiveGroups,beijingTime,canProcessOrder,confirmationAmount,createArchiveState,orderStatus,orderStatuses,paymentFilters,receivableLabel,type ArchiveTab} from '@quote/archive-client';
 import {downloadFile,request} from '../api';
+import SourceFiles from './SourceFiles.vue';
+const sourceActivity=reactive<Record<string,boolean>>({});
 const props=defineProps<{locked:boolean}>();
 const emit=defineEmits<{(e:'busy-changed',value:boolean):void;(e:'failure',value:unknown):void;(e:'process-order',value:ArchiveOrder):void}>();
 const state=reactive(createArchiveState()),tab=ref<ArchiveTab>('source'),working=ref(false),fileError=ref('');
@@ -10,7 +12,7 @@ const controller=new ArchiveController(request,state,e=>emit('failure',e));
 const emptyFilters=()=>archiveFilterForm();
 const filters=reactive(emptyFilters());
 const filtersDirty=computed(()=>isFiltersDirty(filters,state.applied));
-const ownBusy=computed(()=>working.value||state.listLoading||state.detailLoading||state.hospitalsLoading),locked=computed(()=>props.locked||ownBusy.value);
+const ownBusy=computed(()=>working.value||state.listLoading||state.detailLoading||state.hospitalsLoading||Object.values(sourceActivity).some(Boolean)),locked=computed(()=>props.locked||ownBusy.value);
 watch(ownBusy,value=>emit('busy-changed',value),{flush:'sync',immediate:true});
 const pages=computed(()=>state.page?Math.max(1,Math.ceil(state.page.total/state.page.pageSize)):1);
 const refsOpen=reactive<Record<string,boolean>>({});
@@ -31,9 +33,9 @@ async function move(page:number){if(locked.value)return;restoreAppliedFilters(fi
 async function refresh(){if(locked.value)return;fileError.value='';if(state.mode==='detail')await controller.open(state.selectedId);else{restoreAppliedFilters(filters,state.applied);await Promise.all([controller.hospitals(),controller.back()]);}}
 async function download(file:{id:string;format:'pdf'|'xlsx';filename:string}){if(locked.value)return;working.value=true;fileError.value='';try{await downloadFile(file.id,file.format,file.filename);}catch(e){fileError.value=e instanceof Error?e.message:'下载失败，请重试';emit('failure',e);}finally{working.value=false;}}
 function processOrder(){if(locked.value||!state.detail||!canProcessOrder(state.detail.order))return;emit('process-order',state.detail.order);}
-onMounted(async()=>{if(props.locked)return;await Promise.all([controller.hospitals(),controller.query({...filters} as ArchiveFilters)]);});
+let ready:Promise<unknown>=Promise.resolve();onMounted(()=>{ready=Promise.all([controller.hospitals(),controller.query({...filters} as ArchiveFilters)]);});
 onBeforeUnmount(()=>{controller.dispose();emit('busy-changed',false);});
-defineExpose({refresh});
+defineExpose({refresh,openOrder:async(id:string)=>{await ready;await open(id);}});
 </script>
 <template>
  <view class="archive">
@@ -57,10 +59,11 @@ defineExpose({refresh});
   </template>
   <template v-else>
    <button class="text-button" :disabled="locked" @click="back">← 返回原筛选列表</button><text v-if="state.detailLoading" class="empty">正在读取档案详情…</text><view v-if="state.detailError" class="error">详情读取失败：{{state.detailError}}<button class="text-button" :disabled="locked" @click="controller.open(state.selectedId)">重新读取</button></view>
-   <template v-if="state.detail"><text class="eyebrow">{{state.detail.order.hospitalName}}</text><text class="title detail-title">{{state.detail.order.orderNo}}</text><text class="subtle small">{{orderStatus(state.detail.order.status)}} · {{state.detail.order.receivedDate}} · 销售代录</text><view class="facts"><text>当前订单负责人：{{state.detail.order.owner.name}}</text><text>原订单负责人：{{state.detail.order.originalOwner.name}}</text><text>最终确认金额：{{confirmationAmount(state.detail.order)}}</text><text>应收情况：{{receivableLabel(state.detail.order)}}</text></view>
+   <template v-if="state.detail"><text class="eyebrow">{{state.detail.order.hospitalName}}</text><text class="title detail-title">{{state.detail.order.orderNo}}</text><text class="subtle small">{{orderStatus(state.detail.order.status)}} · {{state.detail.order.receivedDate||'待核实'}} · {{state.detail.order.source==='historical_backfill'?'历史补录':state.detail.order.source==='hospital_self'?'医院录入':'销售代录'}}</text><view class="facts"><text>当前订单负责人：{{state.detail.order.owner.name}}</text><text>原订单负责人：{{state.detail.order.originalOwner.name}}</text><text>最终确认金额：{{confirmationAmount(state.detail.order)}}</text><text>应收情况：{{receivableLabel(state.detail.order)}}</text></view>
     <button v-if="canProcessOrder(state.detail.order)" class="primary full" :disabled="locked" @click="processOrder">进入当前业务处理</button><text v-else class="access">当前订单只读；已完成和已作废订单仅供查阅。</text>
     <scroll-view scroll-x class="tab-scroll"><view class="tabs"><button v-for="group in archiveGroups" :key="group.label" :class="{selected:activeGroup===group}" :disabled="locked" @click="tab=group.sections[0]">{{group.label}}</button></view></scroll-view><scroll-view v-if="activeGroup.sections.length>1" scroll-x class="section-scroll"><view class="section-tabs"><button v-for="section in activeGroup.sections" :key="section" :class="{selected:tab===section}" :disabled="locked" @click="tab=section">{{archiveTabs.find(t=>t[0]===section)?.[1]}}</button></view></scroll-view>
     <view v-for="(panel,index) in panels" :key="tab+'-'+index" class="panel"><text class="panel-title">{{panel.title}}</text><text v-if="panel.note" class="subtle small panel-note">{{panel.note}}</text><view v-if="panel.facts" class="panel-facts"><view v-for="fact in panel.facts" :key="fact[0]"><text class="tiny subtle">{{fact[0]}}</text><text class="fact-value">{{fact[1]}}</text></view></view><scroll-view v-if="panel.columns&&panel.rows?.length" scroll-x class="table-scroll"><view class="table" :style="{width:Math.max(480,panel.columns.length*126)+'px'}"><view class="table-row table-head"><text v-for="column in panel.columns" :key="column" class="cell">{{column}}</text></view><view v-for="(row,i) in panel.rows" :key="i" class="table-row"><text v-for="(cell,j) in row" :key="j" class="cell">{{cell}}</text></view></view></scroll-view><view v-if="panel.references?.length"><button class="text-button refs-toggle" :disabled="locked" @click="refsOpen[tab+index]=!refsOpen[tab+index]">{{refsOpen[tab+index]?'收起引用信息':'查看引用信息'}}</button><view v-if="refsOpen[tab+index]" class="panel-facts references"><view v-for="(reference,j) in panel.references" :key="j"><text class="tiny subtle">{{reference[0]}}</text><text class="fact-value">{{reference[1]}}</text></view></view></view></view>
+    <view v-if="tab==='source'" class="panel"><text class="panel-title">原始采购资料</text><SourceFiles v-if="state.detail.historical" :reference="{kind:'historical_order',orderId:state.detail.order.id}" readonly :locked="props.locked||working" @busy-changed="sourceActivity['history']=$event" @failure="emit('failure',$event)"/><template v-else><view v-for="revision in state.detail.revisions" :key="revision.id"><text>R{{revision.revisionNo}} 原单</text><SourceFiles :reference="{kind:'purchase_revision',orderId:state.detail.order.id,revisionId:revision.id}" readonly :locked="props.locked||working" @busy-changed="sourceActivity[revision.id]=$event" @failure="emit('failure',$event)"/></view></template></view>
     <view v-if="tab==='files'&&files.length" class="panel"><text class="panel-title">下载已生成文件</text><view v-for="file in files" :key="file.id" class="file-row"><text>{{file.filename}}</text><text class="tiny subtle">{{file.version}} · {{beijingTime(file.createdAt)}}</text><button :disabled="locked" @click="download(file)">{{working?'正在准备…':'下载 '+file.format.toUpperCase()}}</button></view></view>
    </template>
   </template><view v-if="fileError" class="error">{{fileError}}</view>

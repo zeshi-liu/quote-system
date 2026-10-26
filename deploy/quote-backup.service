@@ -1,0 +1,13 @@
+[Unit]
+Description=Quote hourly encrypted offhost backup
+Requires=docker.service
+After=docker.service
+# Install a reviewed operator notification unit before enabling timers.
+OnFailure=quote-ops-alert@%n.service
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/quote/release
+EnvironmentFile=/etc/quote/compose.env
+ExecStart=/usr/bin/docker compose -f deploy/compose.yaml --profile operations run --rm --no-deps backup
+TimeoutStartSec=45min
+Nice=10

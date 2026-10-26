@@ -10,6 +10,8 @@ import type {ArchivePage,ArchiveOrder,ArchiveDetail,ArchiveQuote,ArchiveHospital
 import {archiveRows,archivePageSql,priceHistorySql} from './queries';
 import {paymentRecords} from '../receivables/service';
 import {auditDto,supplierSnapshot} from './projections';
+import {HistoricalService} from '../historical/service';
+import type {SourceFile} from '../../../../packages/contracts/src/source-files';
 
 const iso=(v:Date|string|null)=>v?new Date(v).toISOString():null;
 const integer=(fallback:number,max:number)=>z.coerce.number().int().min(1).max(max).default(fallback);
@@ -19,8 +21,8 @@ const priceFilters=z.object({hospitalId:uuid,name:z.string().max(100).transform(
 const isAdmin=(actor:Actor)=>actor.role==='admin'&&actor.channel==='pc';
 
 function orderDto(row:any,actor:Actor,now:Date):ArchiveOrder{
- const amount:string|null=row.ar_amount??null,confirmed=row.confirmed_version_id!==null&&row.confirmed_version_id!==undefined,total=confirmed?row.confirmed_document?.total??null:null;
- return {...summary(row,actor),writable:actor.role==='salesperson'&&row.sales_user_id===actor.id,hospitalId:row.hospital_id,createdAt:iso(row.created_at)!,owner:{id:row.sales_user_id,name:row.owner_name},originalOwner:{id:row.original_sales_user_id,name:row.original_owner_name},source:'sales_entry',confirmation:!confirmed?'pending':total===null?'all_missing':'priced',confirmedTotal:total,receivable:amount===null?null:{amount,paid:row.ar_paid,balance:row.ar_balance,dueDate:row.ar_due_date,state:decimal(row.ar_balance).isZero()?'settled':row.ar_due_date<today(now)?'overdue':row.ar_due_date===today(now)?'due':'open'},matchedRevisions:row.matched_revisions||[]};
+ const history=row.entry_mode==='historical_backfill',amount:string|null=row.ar_amount??null,confirmed=history?row.historical_verification_status==='verified':row.confirmed_version_id!==null&&row.confirmed_version_id!==undefined,total=confirmed?(history?(row.ar_id?row.historical_amount:null):row.confirmed_document?.total??null):null;
+ return {...summary(row,actor),writable:actor.role==='salesperson'&&row.sales_user_id===actor.id&&(row.submission_source!=='hospital_self'||!!row.hospital_submitted_at),hospitalId:row.hospital_id,createdAt:iso(row.created_at)!,owner:{id:row.sales_user_id,name:row.owner_name},originalOwner:{id:row.original_sales_user_id,name:row.original_owner_name},entryMode:row.entry_mode,source:history?'historical_backfill':row.submission_source==='hospital_self'?'hospital_self':'sales_entry',confirmation:!confirmed?'pending':total===null?'all_missing':'priced',confirmedTotal:total,receivable:amount===null?null:{amount,paid:row.ar_paid,balance:row.ar_balance,dueDate:row.ar_due_date,state:decimal(row.ar_balance).isZero()?'settled':row.ar_due_date<today(now)?'overdue':row.ar_due_date===today(now)?'due':'open'},matchedRevisions:row.matched_revisions||[]};
 }
 
 export class ArchiveService{
@@ -37,7 +39,8 @@ export class ArchiveService{
   for(const v of versions)quotes.push(await this.quote(c,row,v,now));
   const audits=(await c.query('SELECT a.*,COALESCE(u.name,m.name) AS profile_name FROM audit_records a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN supplier_links l ON l.id=a.actor_id LEFT JOIN supplier_tasks t ON t.id=l.task_id LEFT JOIN manufacturers m ON m.id=t.manufacturer_id WHERE a.purchase_order_id=$1 ORDER BY a.created_at,a.id',[id])).rows;
   const revisionDtos:ArchiveDetail['revisions']=[];for(const r of revisions)revisionDtos.push({id:r.id,revisionNo:r.revision_no,status:r.status,frozenAt:iso(r.frozen_at),lines:await purchaseLines(c,r.id)});
-  return {order:orderDto(row,actor,now),asOf:now.toISOString(),sourceFiles:[],revisions:revisionDtos,supplierTasks,quotes,audits:audits.map(auditDto),payments:row.ar_id===null?[]:await paymentRecords(c,row.ar_id)};
+  const sourceFiles:SourceFile[]=(await c.query("SELECT * FROM source_files WHERE order_id=$1 AND purpose IN('purchase_image','purchase_excel','historical_attachment') ORDER BY created_at,id",[id])).rows.map(f=>({id:f.id,purpose:f.purpose,reference:f.reference_kind==='historical_order'?{kind:'historical_order',orderId:id}:{kind:'purchase_revision',orderId:id,revisionId:f.revision_id},fileName:f.file_name,mimeType:f.mime_type,fileType:f.file_type,byteSize:f.byte_size,sha256:f.sha256,uploadedBy:f.uploaded_by,createdAt:iso(f.created_at)!,parentFileId:f.parent_file_id}));
+  return {order:orderDto(row,actor,now),asOf:now.toISOString(),sourceFiles,historical:row.entry_mode==='historical_backfill'?await new HistoricalService(this.store).view(c,actor,row):null,revisions:revisionDtos,supplierTasks,quotes,audits:audits.map(auditDto),payments:row.ar_id===null?[]:await paymentRecords(c,row.ar_id)};
  });}
  private async quote(c:Client,root:any,v:any,now:Date):Promise<ArchiveQuote>{
   const document=(await snapshot(c,{...root,quote_no:v.quote_no,revision_id:v.revision_id},v,now)).document;

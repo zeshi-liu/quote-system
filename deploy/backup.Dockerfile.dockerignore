@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/dist
+**/unpackage
+.env
+.env.*
+!.env.example
+.local
+output
+tmp
+*.pem
+*.key
+*.dump
+*.age

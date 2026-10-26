@@ -1,6 +1,8 @@
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import {existsSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {validateLogoImage,type ResolvedQuoteLogo} from './template';
 import type {QuoteDocument,ExportFormat} from '../../../../packages/contracts/src';
 
 export const contentType=(format:ExportFormat)=>format==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -12,12 +14,14 @@ function validate(d:QuoteDocument){
  if(d.schemaVersion!==1||!d.lines.length||d.lines.length>100)throw new Error('报价快照格式错误');
  for(const l of d.lines)if(l.name.length>100||l.spec.length>200||l.remark.length>500||l.unit!=='kg'||!['priced','missing'].includes(l.status)||l.status==='missing'&&(l.unitPrice!==null||l.amount!==null))throw new Error('报价明细格式错误');
 }
-export async function renderQuote(d:QuoteDocument,format:ExportFormat):Promise<Buffer>{validate(d);return format==='pdf'?pdf(d):xlsx(d);}
-async function xlsx(d:QuoteDocument):Promise<Buffer>{
+export type RenderDocument=QuoteDocument & {logoImage?:ResolvedQuoteLogo};
+export async function renderQuote(d:RenderDocument,format:ExportFormat):Promise<Buffer>{validate(d);if(d.logo){if(!d.logoImage||d.logoImage.mimeType!==d.logo.mimeType||d.logoImage.bytes.length!==d.logo.byteSize||createHash('sha256').update(d.logoImage.bytes).digest('hex')!==d.logo.sha256)throw Object.assign(new Error('模板 logo 图像与冻结依据不符'),{code:'TEMPLATE_LOGO_INVALID'});validateLogoImage(d.logoImage);}else if(d.logoImage)throw Object.assign(new Error('模板 logo 缺少冻结依据'),{code:'TEMPLATE_LOGO_INVALID'});return format==='pdf'?pdf(d):xlsx(d);}
+async function xlsx(d:RenderDocument):Promise<Buffer>{
  const book=new ExcelJS.Workbook();book.creator=d.sellerName;book.created=new Date(d.quoteDate+'T00:00:00+08:00');
  const sheet=book.addWorksheet('报价单',{pageSetup:{paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0}});
  sheet.columns=[{width:8},{width:24},{width:25},{width:16},{width:18},{width:20},{width:12},{width:28}];
  function full(text:string,size=11){const wrapped=text.split('\n').flatMap(p=>Array.from({length:Math.max(1,Math.ceil(p.length/50))},(_,i)=>p.slice(i*50,(i+1)*50)));let row:ExcelJS.Row;for(let i=0;i<wrapped.length;i+=18){row=sheet.addRow([wrapped.slice(i,i+18).join('\n')]);sheet.mergeCells(row.number,1,row.number,8);row.font={name:'微软雅黑',size};row.alignment={wrapText:true,vertical:'middle'};row.height=Math.max(23,Math.min(18,wrapped.length-i)*(size+7));}return row!;}
+ if(d.logoImage){const {width,height}=validateLogoImage(d.logoImage),factor=Math.min(120/width,48/height);const row=sheet.addRow([]);sheet.mergeCells(row.number,1,row.number,8);row.height=50;const id=book.addImage({buffer:d.logoImage.bytes as any,extension:d.logoImage.mimeType==='image/png'?'png':'jpeg'});sheet.addImage(id,{tl:{col:0,row:0},ext:{width:width*factor,height:height*factor},editAs:'oneCell'});}
  full(d.sellerName,16);full('医院报价单',14);full('医院：'+d.hospitalName);
  full(`报价号：${d.quoteNo}  ·  V${d.versionNo}  ·  日期：${d.quoteDate}`);
  full(`销售：${d.salespersonName}  联系方式：${d.contact||'—'}`);
@@ -41,7 +45,7 @@ function font(){
  if(process.env.NODE_ENV!=='production'&&process.platform==='darwin'&&existsSync('/System/Library/Fonts/STHeiti Light.ttc'))return {path:'/System/Library/Fonts/STHeiti Light.ttc',family:'STHeitiSC-Light'};
  throw new Error('请配置有授权的中文 EXPORT_FONT_PATH 和集合字体 EXPORT_FONT_FAMILY');
 }
-async function pdf(d:QuoteDocument):Promise<Buffer>{
+async function pdf(d:RenderDocument):Promise<Buffer>{
  const doc=new PDFDocument({size:'A4',margins:{left:40,right:40,top:36,bottom:48},bufferPages:true,info:{Title:d.quoteNo+` V${d.versionNo}`,Author:d.sellerName}}),chunks:Buffer[]=[];
  const result=new Promise<Buffer>((resolve,reject)=>{doc.on('data',(b:Buffer)=>chunks.push(b));doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject);});
  // A registered CJK font is embedded in the output; never depend on the recipient's font installation.
@@ -49,7 +53,8 @@ async function pdf(d:QuoteDocument):Promise<Buffer>{
  const horizontal={vert:false,vrt2:false} as unknown as PDFKit.Mixins.TextOptions['features'];
  const left=40,width=515,bottom=774,cols=[24,79,79,64,69,74,45,81];let y=36;
  const text=(value:string,x:number,top:number,w:number,align:'left'|'right'|'center'='left')=>doc.text(value,x,top,{width:w,align,lineGap:2,features:horizontal});
- function heading(){y=36;doc.fontSize(16).fillColor('#173c38');text(d.sellerName,left,y,width);y=doc.y+8;doc.fontSize(13);text('医院报价单',left,y,width);y=doc.y+12;doc.fontSize(9).fillColor('#222222');for(const line of [`医院：${d.hospitalName}`,`报价号：${d.quoteNo}    V${d.versionNo}    日期：${d.quoteDate}`,`销售：${d.salespersonName}    联系方式：${d.contact||'—'}`,d.validUntil?`有效至：${d.validUntil}（含当天）`:'价格有效期：不适用（全部缺货）']){text(line,left,y,width);y=doc.y+5;}y+=7;tableHeader();}
+ const fixedText=(value:string,x:number,top:number,w:number,align:'left'|'right'|'center'='left')=>{const lineHeight=doc.currentLineHeight(true)+2;value.split('\n').forEach((line,i)=>{const measured=doc.widthOfString(line,{features:horizontal}),offset=align==='right'?w-measured:align==='center'?(w-measured)/2:0;doc.text(line,x+offset,top+i*lineHeight,{lineBreak:false,features:horizontal});});};
+ function heading(){y=36;if(d.logoImage){doc.image(d.logoImage.bytes,left,y,{fit:[120,48],valign:'center'});y+=58;}doc.fontSize(16).fillColor('#173c38');text(d.sellerName,left,y,width);y=doc.y+8;doc.fontSize(13);text('医院报价单',left,y,width);y=doc.y+12;doc.fontSize(9).fillColor('#222222');for(const line of [`医院：${d.hospitalName}`,`报价号：${d.quoteNo}    V${d.versionNo}    日期：${d.quoteDate}`,`销售：${d.salespersonName}    联系方式：${d.contact||'—'}`,d.validUntil?`有效至：${d.validUntil}（含当天）`:'价格有效期：不适用（全部缺货）']){text(line,left,y,width);y=doc.y+5;}y+=7;tableHeader();}
  function tableHeader(){const labels=['序','品名','规格','数量 kg','元/kg','金额 元','供货','备注'];doc.rect(left,y,width,24).fill('#e9f0ef');doc.fillColor('#173c38').fontSize(9);let x=left;labels.forEach((label,i)=>{text(label,x+4,y+6,cols[i]!-8,i>=3&&i<=5?'right':'left');x+=cols[i]!;});y+=24;}
  function page(){doc.addPage();heading();}
  heading();
@@ -59,13 +64,13 @@ async function pdf(d:QuoteDocument):Promise<Buffer>{
   while(parts.some(p=>p.length)){const lineHeight=doc.currentLineHeight(true)+2;let available=Math.floor((bottom-y-14)/lineHeight);if(available<1){page();available=Math.floor((bottom-y-14)/lineHeight);}
    const remaining=Math.max(...parts.map(p=>p.length));if(remaining>available&&y>300&&remaining*lineHeight+14<bottom-260){page();available=Math.floor((bottom-y-14)/lineHeight);}
    const count=Math.min(remaining,available),height=Math.max(29,count*lineHeight+14);let x=left;doc.fillColor('#222222');
-   parts.forEach((part,i)=>{let content=part.splice(0,count).join('\n');if(i===0&&continued&&!content)content='续';text(content,x+4,y+7,cols[i]!-8,i>=3&&i<=5?'right':'left');x+=cols[i]!;});
+   parts.forEach((part,i)=>{let content=part.splice(0,count).join('\n');if(i===0&&continued&&!content)content='续';fixedText(content,x+4,y+7,cols[i]!-8,i>=3&&i<=5?'right':'left');x+=cols[i]!;});
    doc.strokeColor('#d2dbd9').lineWidth(.4).moveTo(left,y+height).lineTo(left+width,y+height).stroke();y+=height;continued=true;if(parts.some(p=>p.length))page();
   }
  }
 
  const foot=[d.total===null?'合计：不适用（全部缺货）':'合计（元）：'+d.total,d.taxNote,...(d.notes?[d.notes]:[])];
- for(let i=0;i<foot.length;i++){doc.fontSize(i===0?12:9);const h=doc.heightOfString(foot[i]!,{width,lineGap:2,features:horizontal})+12;if(y+h>bottom)page();text(foot[i]!,left,y+10,width);y+=h;}
+ for(let i=0;i<foot.length;i++){const size=i===0?12:9;doc.fontSize(size);const parts=wrap(foot[i]!,width);while(parts.length){doc.fontSize(size);const lineHeight=doc.currentLineHeight(true)+2;let available=Math.floor((bottom-y-12)/lineHeight);if(available<1){page();doc.fontSize(size);available=Math.floor((bottom-y-12)/lineHeight);}const chunk=parts.splice(0,available);fixedText(chunk.join('\n'),left,y+10,width);y+=chunk.length*lineHeight+12;if(parts.length)page();}}
  const range=doc.bufferedPageRange();for(let p=0;p<range.count;p++){doc.switchToPage(range.start+p);doc.page.margins.bottom=0;doc.fontSize(8).fillColor('#687775');text(`${d.quoteNo} · V${d.versionNo}     第 ${p+1} 页 / 共 ${range.count} 页`,left,808,width,'center');}
  doc.end();return result;
 }

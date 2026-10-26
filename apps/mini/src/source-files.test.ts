@@ -1,0 +1,3 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {fetchMiniPrivateSource} from './source-files';
+test('private source mini download sends Bearer only to the API origin',async()=>{let calls=0,init:RequestInit|undefined;const transport=(async(_url:unknown,options:RequestInit)=>{calls++;init=options;return new Response('file');}) as typeof fetch;await fetchMiniPrivateSource('/api/v1/files/f/content?token=x','current','https://internal.example/api/v1',transport);assert.equal((init?.headers as any).Authorization,'Bearer current');assert.equal(init?.credentials,'omit');await assert.rejects(fetchMiniPrivateSource('https://evil.example/api/v1/files/f/content?token=x','secret','https://internal.example/api/v1',transport));assert.equal(calls,1);});

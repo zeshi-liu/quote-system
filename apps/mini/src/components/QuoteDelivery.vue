@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import QuoteLogo from './QuoteLogo.vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { ExportAccepted, ExportFormat, ExportJob, QuoteDeliveryVersion } from '@quote/contracts';
 import { downloadFile, mutate, pending, request } from '../api';
@@ -102,7 +103,7 @@ onBeforeUnmount(()=>{disposed=true;emit('busyChanged',false);});
    <view v-if="selected.occupied" class="notice">服务器正在生成文件，本版暂时占用。请等待后刷新状态；排队和生成中均不代表成功。</view>
    <text v-else-if="selected.blockReason&&selected.status!=='confirmed'&&selected.status!=='void'" class="warning">{{selected.blockReason}}</text>
    <view class="preview-head"><text class="section-title">医院报价预览</text><text class="subtle">{{selected.document.quoteNo}} · V{{selected.versionNo}}</text></view>
-   <view class="document-meta"><text>报价日期 {{selected.document.quoteDate}}</text><text>{{selected.document.sellerName}}</text><text>销售 {{selected.document.salespersonName}} · {{selected.document.contact||'未填写联系电话'}}</text></view>
+   <QuoteLogo v-if="selected.document.logo" :quote-id="selected.quoteId" :version-id="selected.id" :logo="selected.document.logo" @failure="emit('failure',$event)"/><view class="document-meta"><text>报价日期 {{selected.document.quoteDate}}</text><text>{{selected.document.sellerName}}</text><text>销售 {{selected.document.salespersonName}} · {{selected.document.contact||'未填写联系电话'}}</text></view>
    <scroll-view scroll-x class="table-scroll"><view class="quote-table">
     <view class="table-row table-head"><text>品名 / 规格</text><text>数量 kg</text><text>单价 元/kg</text><text>金额 元</text><text>公开备注</text></view>
     <view v-for="line in selected.document.lines" :key="line.position" class="table-row"><view><text class="drug">{{line.name}}</text><text class="subtle">{{line.spec||'未提供规格'}}</text></view><text class="number">{{line.quantity}}</text><text class="number">{{line.status==='missing'?'缺货':line.unitPrice||'—'}}</text><text class="number">{{line.status==='missing'?'—':line.amount||'—'}}</text><text class="remark">{{line.remark||'—'}}</text></view>

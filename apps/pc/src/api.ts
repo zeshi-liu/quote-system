@@ -21,8 +21,16 @@ export class PcApi {
   try{return await Promise.race([work(),timeout]);}finally{clearTimeout(timer);}
  }
  get<T>(path:string){return this.send<T>(path);}
+ async getImage(path:string):Promise<Blob>{
+  const userId=this.user?.id;if(!userId)throw new PcApiFailure('UNAUTHENTICATED','请重新登录。',401);
+  const abort=new AbortController(),transport=this.transport;let timer:ReturnType<typeof setTimeout>|undefined;
+  const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{abort.abort();reject(new PcApiFailure('REQUEST_TIMEOUT','图片读取超时，请重试。'));},this.timeoutMs);});
+  const work=async()=>{const response=await transport(this.base+path,{method:'GET',credentials:'same-origin',signal:abort.signal,headers:{Accept:'image/png,image/jpeg'}});if(response.status===401)this.clear();if(!response.ok)throw new PcApiFailure('IMAGE_UNAVAILABLE','报价图片读取失败，请重试。',response.status);const type=response.headers.get('content-type')?.split(';')[0];if(!['image/png','image/jpeg'].includes(type||''))throw new PcApiFailure('IMAGE_INVALID','报价图片格式无法核实。');const blob=await response.blob();if(!blob.size||blob.size>20*1024*1024)throw new PcApiFailure('IMAGE_INVALID','报价图片大小无法核实。');if(this.user?.id!==userId)throw new PcApiFailure('SESSION_CHANGED','登录账号已变化，请在当前账号重新读取。');return blob;};
+  try{return await Promise.race([work(),timeout]);}finally{clearTimeout(timer);}
+ }
  async refreshCsrf(){const value=await this.get<{csrf:string}>('/auth/csrf');this.csrf=value.csrf;}
- async post<T>(path:string,body:unknown,key?:string):Promise<T>{if(!this.csrf)await this.refreshCsrf();try{return await this.send<T>(path,'POST',body,key);}catch(e){if(e instanceof PcApiFailure&&e.status===403&&e.code==='CSRF_INVALID'){this.csrf='';try{await this.refreshCsrf();}catch{/* original operation remains unconfirmed */}throw new PcApiFailure(e.code,'页面安全令牌已更新，请手动重试；本次操作未自动重发。',403);}throw e;}}
+ async write<T>(path:string,method:'POST'|'PUT'|'PATCH',body:unknown,key?:string):Promise<T>{if(!this.csrf)await this.refreshCsrf();try{return await this.send<T>(path,method,body,key);}catch(e){if(e instanceof PcApiFailure&&e.status===403&&e.code==='CSRF_INVALID'){this.csrf='';try{await this.refreshCsrf();}catch{/* original operation remains unconfirmed */}throw new PcApiFailure(e.code,'页面安全令牌已更新，请手动重试；本次操作未自动重发。',403);}throw e;}}
+ post<T>(path:string,body:unknown,key?:string):Promise<T>{return this.write<T>(path,'POST',body,key);}
  async restore(){const user=await this.get<User&{channel:string}>('/auth/me');if(user.channel!=='pc'||!['salesperson','admin'].includes(user.role)){this.clear();throw new PcApiFailure('CHANNEL_FORBIDDEN','请使用 PC 内部账号重新登录。',401);}this.user={id:user.id,name:user.name,role:user.role};return this.user;}
  async login(loginName:string,password:string){await this.refreshCsrf();const value=await this.post<PcSession>('/auth/pc/password-login',{loginName,password});if(value.channel!=='pc'){this.clear();throw new PcApiFailure('CHANNEL_FORBIDDEN','PC 登录响应无法确认。');}this.user=value.user;this.csrf=value.csrf;return value;}
  async logout(){try{await this.post('/auth/logout',{});this.clear();}catch(e){if(e instanceof PcApiFailure&&e.status===401)throw e;throw new PcApiFailure(e instanceof PcApiFailure?e.code:'LOGOUT_UNKNOWN','退出结果未确认，请重试或重新加载核实。'+(e instanceof Error?e.message:''),e instanceof PcApiFailure?e.status:undefined);}}

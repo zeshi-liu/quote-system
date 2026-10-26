@@ -1,9 +1,9 @@
 name: Core trial verification
 on:
   push:
-    branches: [main, codex/mini-core-trial, codex/quote-delivery, codex/order-archive, codex/receivables]
+    branches: [main, codex/mini-core-trial, codex/quote-delivery, codex/order-archive, codex/receivables, codex/mvp-completion]
   pull_request:
-    branches: [main, codex/quote-delivery, codex/order-archive]
+    branches: [main, codex/quote-delivery, codex/order-archive, codex/receivables]
 permissions:
   contents: read
 concurrency:

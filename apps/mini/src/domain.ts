@@ -14,3 +14,15 @@ export function recommendation(price:string, method:MarkupMethod, parameter:stri
 }
 export function canManageOrder(order:{writable:boolean;status:string}):boolean{return order.writable&&!['completed','voided'].includes(order.status);}
 export function pricingInputs(lines:import('@quote/contracts').DraftLineInput[]):import('@quote/contracts').DraftLineInput[]{return lines.map(l=>({purchaseLineId:l.purchaseLineId,baseSupplierQuoteLineId:l.baseSupplierQuoteLineId,selectionMode:l.selectionMode,markupMethod:l.markupMethod,parameterValue:l.parameterValue,finalPrice:l.finalPrice||null,finalConfirmed:l.finalConfirmed,lossReason:l.lossReason,publicRemark:l.publicRemark||''}));}
+
+export function assertPurchaseReceipt(operation:{path?:string;body?:Record<string,unknown>;data?:Record<string,unknown>},value:unknown){
+ const path=operation.path||'',b=operation.body||operation.data||{},match=path.match(/^\/sales\/purchase-orders\/([^/]+)\/(?:revisions(?:\/([^/]+)\/(lines|freeze))?|void)$/),create=path==='/sales/purchase-orders';if(!match&&!create)return;
+ const r=value as {id?:unknown;hospitalId?:unknown;purchaserUserId?:unknown;receivedDate?:unknown;revisionId?:unknown;version?:unknown;status?:unknown;lines?:{checked?:unknown}[]}|null;
+ const fail=()=>{throw new Error('采购操作回执尚未核实，请保留原操作标识和输入。');};
+ if(!r||typeof r.id!=='string'||!r.id||!Number.isSafeInteger(r.version)||Number(r.version)<1)fail();
+ if(create){if(r!.status!=='draft'||['hospitalId','purchaserUserId','receivedDate'].some(k=>(r as any)[k]!==b[k]))fail();return;}
+ if(r!.id!==match![1]||typeof b.expectedVersion==='number'&&r!.version!==b.expectedVersion+1)fail();
+ if(match![2]&&r!.revisionId!==match![2])fail();
+ const state=path.endsWith('/void')?'voided':path.endsWith('/freeze')?'frozen':'draft';if(r!.status!==state)fail();
+ if(state==='frozen'&&(!Array.isArray(r!.lines)||!r!.lines!.length||r!.lines!.some(l=>l.checked!==true)))fail();
+}
