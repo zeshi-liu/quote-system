@@ -5,6 +5,16 @@ export interface BusinessOperation {key:string;label:string;path:string;method:'
 type Read=<T>(path:string)=>Promise<T>;
 type Write=<T>(path:string,method:'POST'|'PUT'|'PATCH',body:unknown,key:string)=>Promise<T>;
 interface Storage {getItem(key:string):string|null;setItem(key:string,value:string):void;removeItem(key:string):void;}
+type ReservationLock=<T>(name:string,action:()=>T)=>Promise<T>;
+const reserve:ReservationLock=async(name,action)=>{
+ const locks=globalThis.navigator?.locks;
+ if(locks)return locks.request(name,{mode:'exclusive'},action);
+ if(typeof window!=='undefined')throw new Error('当前浏览器无法安全协调多个页面，请使用支持页面锁的浏览器并通过 HTTPS 访问。');
+ return action();
+};
+function parsePending(raw:string):BusinessOperation{
+ try{const v=JSON.parse(raw);if(!v||typeof v.key!=='string'||!v.key||typeof v.label!=='string'||typeof v.path!=='string'||!v.path.startsWith('/')||!['POST','PUT','PATCH'].includes(v.method)||!v.body||typeof v.body!=='object'||Array.isArray(v.body)||v.metadata!==undefined&&(!v.metadata||typeof v.metadata!=='object'||Array.isArray(v.metadata)))throw new Error();return v;}catch{throw new Error('本机待核实业务资料损坏，请保留资料并联系维护人员。');}
+}
 function assertReceipt(op:BusinessOperation,value:unknown){
  assertPurchaseReceipt(op,value);
  if(historicalOperationTarget(op)){assertHistoricalReceipt(op,value);return;}
@@ -18,13 +28,18 @@ function assertReceipt(op:BusinessOperation,value:unknown){
 }
 export class BusinessOperations {
  pending:BusinessOperation|null=null;private storageKey:string;private receipt:{key:string;result:unknown}|null=null;
- constructor(userId:string,private read:Read,private write:Write,private storage:Storage,private key=()=>crypto.randomUUID()){
+ constructor(userId:string,private read:Read,private write:Write,private storage:Storage,private key=()=>crypto.randomUUID(),private lock:ReservationLock=reserve){
   this.storageKey='quote-pc-business-pending-'+userId;
-  const raw=storage.getItem(this.storageKey);if(raw){try{const v=JSON.parse(raw);if(!v||typeof v.key!=='string'||!v.key||typeof v.label!=='string'||typeof v.path!=='string'||!v.path.startsWith('/')||!['POST','PUT','PATCH'].includes(v.method)||!v.body||typeof v.body!=='object'||Array.isArray(v.body)||v.metadata!==undefined&&(!v.metadata||typeof v.metadata!=='object'||Array.isArray(v.metadata)))throw new Error();this.pending=v;}catch{throw new Error('本机待核实业务资料损坏，请保留资料并联系维护人员。');}}
+  const raw=storage.getItem(this.storageKey);if(raw)this.pending=parsePending(raw);
  }
  resultFor(key:string){return this.receipt?.key===key?this.receipt.result:undefined;}
- private clear(operation:BusinessOperation){const raw=this.storage.getItem(this.storageKey);if(raw){let current:any;try{current=JSON.parse(raw);}catch{throw new Error('本机待核实资料已变化，请刷新并保留原记录。');}if(current.key!==operation.key)throw new Error('其他标签页的待核实操作已变化，请刷新后核对。');}if(this.pending&&this.pending.key!==operation.key)throw new Error('待核实操作已变化，请刷新核对。');this.storage.removeItem(this.storageKey);this.pending=null;}
- async mutate<T>(label:string,path:string,method:BusinessOperation['method'],body:Record<string,unknown>,metadata?:Record<string,unknown>){if(this.pending)throw new Error('上次操作结果尚未核实，请先核对原操作。');const operation={key:this.key(),label,path,method,body:JSON.parse(JSON.stringify(body)),...(metadata?{metadata:JSON.parse(JSON.stringify(metadata))}:{})};this.storage.setItem(this.storageKey,JSON.stringify(operation));this.pending=operation;this.receipt=null;return this.retry<T>();}
- async check(){if(!this.pending)return 'none';const p=this.pending;const r=await this.read<{status:'committed'|'not_found';result?:unknown}>('/operations/'+encodeURIComponent(p.key));if(r.status==='committed'){assertReceipt(p,r.result);this.clear(p);this.receipt={key:p.key,result:r.result};}else if(r.status!=='not_found')throw new Error('操作状态无法确认，请继续核对。');return r.status;}
- async retry<T>():Promise<T>{const p=this.pending;if(!p)throw new Error('没有待核实操作。');try{const r=await this.write<T>(p.path,p.method,p.body,p.key);assertReceipt(p,r);this.clear(p);this.receipt={key:p.key,result:r};return r;}catch(e){const v=e as {status?:number;code?:string};if(v.status!==undefined&&v.status>=400&&v.status<500&&![401,403,404,408,410].includes(v.status)&&!['REQUEST_TIMEOUT','RESPONSE_UNKNOWN','BUSY_RETRY_REQUIRED'].includes(v.code||''))this.clear(p);throw e;}}
+ private clear(operation:BusinessOperation){return this.lock(this.storageKey,()=>{const raw=this.storage.getItem(this.storageKey);if(raw&&parsePending(raw).key!==operation.key)throw new Error('其他标签页的待核实操作已变化，请刷新后核对。');if(this.pending&&this.pending.key!==operation.key)throw new Error('待核实操作已变化，请刷新核对。');this.storage.removeItem(this.storageKey);this.pending=null;});}
+ async mutate<T>(label:string,path:string,method:BusinessOperation['method'],body:Record<string,unknown>,metadata?:Record<string,unknown>){
+  if(this.pending)throw new Error('上次操作结果尚未核实，请先核对原操作。');
+  const operation={key:this.key(),label,path,method,body:JSON.parse(JSON.stringify(body)),...(metadata?{metadata:JSON.parse(JSON.stringify(metadata))}:{})};
+  await this.lock(this.storageKey,()=>{const raw=this.storage.getItem(this.storageKey);if(raw){this.pending=parsePending(raw);throw new Error('另一标签页有待核实操作，请先核对原操作。');}this.storage.setItem(this.storageKey,JSON.stringify(operation));this.pending=operation;this.receipt=null;});
+  return this.retry<T>();
+ }
+ async check(){if(!this.pending)return 'none';const p=this.pending;const r=await this.read<{status:'committed'|'not_found';result?:unknown}>('/operations/'+encodeURIComponent(p.key));if(r.status==='committed'){assertReceipt(p,r.result);await this.clear(p);this.receipt={key:p.key,result:r.result};}else if(r.status!=='not_found')throw new Error('操作状态无法确认，请继续核对。');return r.status;}
+ async retry<T>():Promise<T>{const p=this.pending;if(!p)throw new Error('没有待核实操作。');try{const r=await this.write<T>(p.path,p.method,p.body,p.key);assertReceipt(p,r);await this.clear(p);this.receipt={key:p.key,result:r};return r;}catch(e){const v=e as {status?:number;code?:string};if(v.status!==undefined&&v.status>=400&&v.status<500&&![401,403,404,408,410].includes(v.status)&&!['REQUEST_TIMEOUT','RESPONSE_UNKNOWN','BUSY_RETRY_REQUIRED'].includes(v.code||''))await this.clear(p);throw e;}}
 }
