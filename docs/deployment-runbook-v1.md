@@ -10,6 +10,8 @@
 
 CPU 上限允许短时竞争；内存硬上限约 2.9 GiB（含单次备份），余量留给操作系统、Docker 与缓存。重任务 1 GiB（包含子进程）、API 512 MiB、PostgreSQL 768 MiB、提醒 192 MiB、维护 128 MiB、入口 96 MiB、备份 256 MiB。此为试用起点，须按真实 100 行订单及导出实测。API/各 worker 连接池 5；数据库最多 40。API/数据库均无公网端口映射，仅入口 80/443。数据库持久化卷禁止 `docker compose down -v`；应用重建不删除卷。
 
+HTTPS 入口另接 `ingress` 网络接收 80/443，与 API 仅通过 `trusted-proxy` 内部网络通信；固定入口 172.30.90.2、API 172.30.90.3（子网 172.30.90.0/29，可整体配置）。入口不加入后端 default 网络，API 保留 default 网络访问数据库与必要的外部服务。Compose 将 API 的 TRUSTED_PROXY_IPS 限定为配置后的入口单一 IP，nginx 覆盖 X-Forwarded-For 为实际 socket 客户端地址；不使用 trust proxy=true 或信任全部私网。直接访问 API 的不可信对端不能借 XFF 冒充他人；可信入口传入多地址/无效 XFF 被拒绝。自定义部署不走此 Compose 时须明确指定唯一代理 IP，并单独验证来源隔离及限流；默认空配置不信任转发头。目标 Linux 仍须验证两个客户端经 HTTPS 的限流相互隔离、伪造 XFF 被入口覆盖，以及数据库/API 没有公网入口。
+
 构建在独立构建环境完成，不在有业务写入的 2 核主机安装依赖/打包。镜像采用 Node 24、pnpm 11.25.0、PostgreSQL 17.11；正常 `--frozen-lockfile`，不绕过依赖信任策略。版本标签仍可移动，上线构建须解析并记录镜像摘要、commit、锁文件校验和及配置版本，审核后使用 `QUOTE_*_IMAGE` 固定产物。Dockerfile 的 Dockerfile 专属 ignore 会排除 .env、主机依赖、密钥与本地数据；凭证只在宿主受限目录或挂载文件中。
 
 ## 二 受保护配置
@@ -18,10 +20,11 @@ CPU 上限允许短时竞争；内存硬上限约 2.9 GiB（含单次备份）�
 
 | 文件 | 必需内容 |
 | --- | --- |
-| compose.env | QUOTE_ENV_FILE=/etc/quote/runtime.env；QUOTE_MIGRATION_ENV_FILE=/etc/quote/migration.env；QUOTE_BACKUP_ENV_FILE=/etc/quote/backup.env；QUOTE_DOMAIN 实际域名；QUOTE_CERT_DIR（含 fullchain.pem/privkey.pem）；QUOTE_FONT_DIR（合法授权 Noto CJK）；QUOTE_POSTGRES_PASSWORD_FILE、QUOTE_MIGRATOR_PASSWORD_FILE、QUOTE_APP_PASSWORD_FILE；QUOTE_BACKUP_RECIPIENTS_FILE；QUOTE_RESTORE_INPUT_DIR；三个 QUOTE_*_IMAGE 固定镜像 |
+| compose.env | QUOTE_ENV_FILE=/etc/quote/runtime.env；QUOTE_MIGRATION_ENV_FILE=/etc/quote/migration.env；QUOTE_BACKUP_ENV_FILE=/etc/quote/backup.env；QUOTE_DOMAIN 实际域名；QUOTE_CERT_DIR（含 fullchain.pem/privkey.pem）；QUOTE_FONT_DIR（合法授权 Noto CJK）；QUOTE_POSTGRES_PASSWORD_FILE、QUOTE_MIGRATOR_PASSWORD_FILE、QUOTE_APP_PASSWORD_FILE；QUOTE_BACKUP_RECIPIENTS_FILE；QUOTE_RESTORE_INPUT_DIR；三个 QUOTE_*_IMAGE 固定镜像；若与现有网络冲突，整体调整 QUOTE_PROXY_SUBNET、QUOTE_PROXY_WEB_IP、QUOTE_PROXY_API_IP（默认 172.30.90.0/29、.2、.3） |
 | runtime.env | NODE_ENV=production；DATABASE_URL 使用 quote_app、postgres:5432/quote_system、至少 16 位随机且 URL 编码的密码；SUPPLIER_WEB_URL=https://实际域名/supplier；ALLOWED_ORIGINS=https://实际域名；TRIAL_PASSWORD_LOGIN=false；DEV_PGLITE=false；FILE_STORAGE_DRIVER=cos；COS_SECRET_ID、COS_SECRET_KEY、COS_BUCKET、COS_REGION；QUOTE_SELLER_NAME、QUOTE_CONTACT；EXPORT_FONT_PATH=/fonts/NotoSansCJK-Regular.ttc、EXPORT_FONT_FAMILY=NotoSansCJKsc-Regular；REMINDER_SEND_WECHAT=false |
 | migration.env | 仅 MIGRATION_DATABASE_URL，使用 quote_migrator 角色；不要把迁移凭证放入运行配置 |
 | backup.env | BACKUP_DATABASE_URL（专用只读备份角色）；BACKUP_COS_SECRET_ID、BACKUP_COS_SECRET_KEY、BACKUP_COS_BUCKET、BACKUP_COS_REGION；COS_BUCKET（用于拒绝同业务桶）；BACKUP_SCOPE（环境标识，小写字母/数字/连字符）；BACKUP_AGE_RECIPIENTS_FILE=/run/backup-recipients.txt；BACKUP_WORK_DIR=/backup-work |
+| ops-alert.env | 从 `deploy/ops-alert.env.example` 复制到 `/etc/quote/ops-alert.env`、0600；OPS_ALERT_DRIVER 默认 disabled；实际启用时设 webhook、OPS_ALERT_WEBHOOK_URL 为受控 HTTPS 告警接收地址，可选 OPS_ALERT_BEARER_TOKEN，OPS_ALERT_TIMEOUT_MS 为 1–10000 毫秒（默认 5000）。不把此文件放业务容器或镜像 |
 | 三份密码文件 | 对应 PostgreSQL 管理员、quote_migrator、quote_app 原始随机密码；运行连接串密码与此一致。Docker 文件型 secrets 保留宿主权限，须将这三份文件设置为镜像 postgres 用户 UID 可读（通常 UID 999、0400），并在目标镜像核对 UID，勿假定 compose mode 能改 bind 文件权限 |
 | backup-recipients.txt | age 公钥（建议 age-keygen 生成）；恢复私钥离线异地保管，不放备份主机/运行镜像；公钥挂载文件可设 0444（宿主目录仍 0700），使 backup 容器 postgres 用户可读 |
 
@@ -88,7 +91,13 @@ docker compose -f deploy/compose.yaml --profile operations run --rm --no-deps ba
 
 脚本使用 PostgreSQL 17.11 `pg_dump --format=custom --no-owner --no-acl`，先 `pg_restore --list` 检查，再用 age 公钥加密；只有密文上传备份桶。上传后流式回读密文检查长度与 SHA-256，再写清单、回读清单；数据时间使用开始备份前时间，记录完成时间。任一环节失败非零退出，不写 last-success。备份不重叠，锁未释放时拒绝新任务；进程被杀可能遗留锁，运维确认无运行任务后才移除。最近 24 份小时备份与最近 7 个 UTC 自然日各一份保留，日备与小时备去重；不足时全部保留。仅处理本脚本命名空间清单，异常清单使任务失败，未知对象不自动删除。中断上传可能遗留无清单密文，须人工巡检后清理，不把它算成功备份。
 
-安装 `deploy/quote-backup.service/.timer` 到 systemd 后替换发布目录。**启用前必须实现并测试 quote-ops-alert@.service**：备份失败即时告警（模板不会自行发送外部消息）。配置外部独立监测主机，使用只读备份桶权限每 15 分钟运行 `node scripts/deployment-backup-freshness.cjs`：0=新鲜，2=数据时间超过 90 分钟，3=达到 2 小时目标失守，1=缺失备份/读失败。它直接读异机清单，不依赖 API 或本机 last-success。独立告警通道及服务器/磁盘/证书监控尚须运维接线验收；只安装 timer 不等于告警可用。
+安装 `deploy/quote-backup.service`、`deploy/quote-backup.timer` 和 `deploy/quote-ops-alert@.service` 到 systemd 后，核对三个 unit 中的实际发布目录并 reload。备份非零退出会经 OnFailure 启动已提供的告警 unit；unit 只读取独立的 ops-alert.env，经 `ops-alert` 容器调用 `scripts/deployment-alert.cjs`，不挂载业务或迁移凭据。告警配置文件缺失、默认 disabled 或配置不完整时明确记为 `unavailable` 并非零退出，不能认定告警已经发出。启用 timer 前由维护人配置和测试真实通道及接收人；本次开发没有执行真实外发。
+
+告警适配使用通用 HTTPS webhook：POST JSON `{ "version": 1, "event": "unit_failed", "unit": "quote-backup.service", "occurredAt": "UTC时间" }`，可选 `Authorization: Bearer`。接收端须按此契约接入实际运维告警渠道；URL 查询串也可能含秘密，不得记录配置全文。只接受 HTTPS，不跟随重定向，不读取或打印响应正文，不自动重试。HTTP 2xx 只记录 `accepted`（退出码 0，表示端点接受，并不证明维护人已收到）；非 2xx 为 `rejected`（1）；未配置/无效配置为 `unavailable`（2）；超时或网络响应未知为 `outcome_unknown`（3），由维护人查证后决定下一次动作。告警失败仅在 journald/容器输出留下安全记录，不递归触发自身告警。
+
+配置外部独立监测主机，使用只读备份桶权限每 15 分钟运行 `node scripts/deployment-backup-freshness.cjs`：0=新鲜，2=数据时间超过 90 分钟，3=达到 2 小时目标失守，1=缺失备份/读失败。它直接读异机清单，不依赖 API 或本机 last-success。监测调度器应将 2/3/1 分别接入同一 hook 的 `backup-stale` / `backup-rpo-target-missed` / `backup-monitor-failed` 事件（例如加载独立告警配置后运行 `node scripts/deployment-alert.cjs backup-stale quote-backup.service`）；hook 非零须保留，不把发送失败改为监测成功。独立主机、实际调度及接收验收仍待维护人落实；只安装 timer 不等于告警可用。
+
+备份、恢复和新鲜度脚本错误按 JSON 输出 `event/stage/reason`，工具失败额外记录白名单工具名及数字退出码；例如 `backup_failed/dump/tool_failed` 或 `backup_failed/upload_cipher/operation_failed`。阶段覆盖配置、归档、加密、上传/回读、保留、恢复校验与新库恢复；不记录连接串、目录、参数、供应商原始错误或 stderr。systemd 运行时通过 `journalctl -u quote-backup.service` 和对应 `quote-ops-alert@...` unit 查看安全失败记录；实际故障须结合阶段按受控运维流程核查，不把业务账号或秘密复制到日志。
 
 逻辑备份无任意时间点恢复；角色/权限/扩展/配置单独保存重建清单。备份目录只保存状态与短期临时密文，明文 dump 产生后即加密并删除，运行失败 finally 清理。磁盘不足/备份失败不得忽略或删除业务记录腾空间。
 

@@ -21,3 +21,72 @@ test('heavy cycle cannot claim while full/unknown or after shutdown signal',asyn
 test('heavy preflight requires actual PostgreSQL and backup volume monitoring paths',()=>{const {validate}=require('../../../scripts/deployment-preflight.cjs');assert.throws(()=>validate(valid,{heavy:true}),/HEAVY_DISK_PATHS/);assert.throws(()=>validate({...valid,HEAVY_DISK_PATHS:'/tmp'},{heavy:true}),/HEAVY_DISK_PATHS/);assert.doesNotThrow(()=>validate({...valid,HEAVY_DISK_PATHS:'/tmp,/monitor/postgres,/monitor/backup'},{heavy:true}));const text=readFileSync('deploy/compose.yaml','utf8');assert.match(text,/postgres-data:\/monitor\/postgres:ro/);assert.match(text,/backup-work:\/monitor\/backup:ro/);});
 test('heavy disk probing refuses an ordinary directory that is not an actual mounted data volume',async()=>{const {mountedStatfs}=require('../../../deploy/launcher.cjs');let probes=0;const read=async()=> '1 0 8:1 / / rw - ext4 /dev/root rw\n2 1 0:1 / /tmp rw - tmpfs tmpfs rw\n3 1 8:2 / /monitor/postgres ro - ext4 /dev/data ro\n';const stat=async()=>{probes++;return {blocks:100n,bfree:30n,bavail:30n};};await assert.rejects(()=>mountedStatfs('/monitor/backup',read,stat),/not_mounted/);assert.equal(probes,0);await mountedStatfs('/monitor/postgres',read,stat);assert.equal(probes,1);});
 test('database mount pressure pauses even when tmp is empty and diagnostics omit raw errors',async()=>{const {capacity,runHeavyCycle}=require('../../../deploy/launcher.cjs');const state=await capacity(['/tmp','/monitor/postgres'],async(path:string)=>({blocks:100n,bfree:path==='/tmp'?100n:15n,bavail:path==='/tmp'?100n:15n}));assert.equal(state.status,'paused_full');let claimed=0;const reported:any[]=[];await runHeavyCycle({signal:new AbortController().signal,gate:()=>capacity(['/tmp'],async()=>{throw Error('postgresql://sensitive-credential');}),report:(value:any)=>reported.push(value),exportTask:async()=>claimed++,parseTask:async()=>claimed++});assert.equal(claimed,0);assert.ok(!JSON.stringify(reported).includes('sensitive'));assert.equal(reported[0].status,'paused_unknown');});
+
+
+test('unconfigured ops alert exits unavailable without pretending a message was sent',()=>{
+ const env={...process.env};for(const key of Object.keys(env))if(key.startsWith('OPS_ALERT_'))delete env[key];
+ const result=spawnSync(process.execPath,['scripts/deployment-alert.cjs','unit-failed','quote-backup.service'],{env,encoding:'utf8'});
+ assert.equal(result.status,2,result.stderr);
+ const record=JSON.parse(result.stdout);assert.equal(record.outcome,'unavailable');assert.equal(record.reason,'not_configured');assert.equal(record.unit,'quote-backup.service');
+});
+test('configured webhook posts only bounded operational facts and records endpoint acceptance',async()=>{
+ const {notify}=require('../../../scripts/deployment-alert.cjs');let calls=0;
+ const env={OPS_ALERT_DRIVER:'webhook',OPS_ALERT_WEBHOOK_URL:'https://alerts.fixture.test/hook?key=secret-query',OPS_ALERT_BEARER_TOKEN:'secret-bearer'};
+ const result=await notify({event:'unit_failed',unit:'quote-backup.service'},env,async(url:string,request:any)=>{
+  calls++;assert.equal(url,env.OPS_ALERT_WEBHOOK_URL);assert.equal(request.method,'POST');assert.equal(request.redirect,'error');assert.equal(request.headers.Authorization,'Bearer secret-bearer');assert.ok(request.signal);
+  const payload=JSON.parse(request.body);assert.equal(payload.event,'unit_failed');assert.equal(payload.unit,'quote-backup.service');assert.equal(payload.version,1);assert.ok(!request.body.includes('secret'));
+  return {ok:true,status:202};
+ });
+ assert.equal(calls,1);assert.equal(result.outcome,'accepted');assert.ok(!JSON.stringify(result).includes('secret'));assert.ok(!JSON.stringify(result).includes('fixture.test'));
+});
+test('ops alert rejects unsafe configuration and never follows redirects or automatically retries unknown outcomes',async()=>{
+ const {notify}=require('../../../scripts/deployment-alert.cjs');let calls=0;const transport=async()=>{calls++;throw Error('https://secret-endpoint.test/?token=do-not-log');};
+ for(const env of [{OPS_ALERT_DRIVER:'webhook'},{OPS_ALERT_DRIVER:'webhook',OPS_ALERT_WEBHOOK_URL:'http://alerts.fixture.test'},{OPS_ALERT_DRIVER:'webhook',OPS_ALERT_WEBHOOK_URL:'https://name:secret@alerts.fixture.test'},{OPS_ALERT_DRIVER:'webhook',OPS_ALERT_WEBHOOK_URL:'https://alerts.fixture.test',OPS_ALERT_TIMEOUT_MS:'0'}]){
+  const result=await notify({event:'unit_failed',unit:'quote-backup.service'},env,transport);assert.equal(result.outcome,'unavailable');
+ }
+ assert.equal(calls,0);const env={OPS_ALERT_DRIVER:'webhook',OPS_ALERT_WEBHOOK_URL:'https://alerts.fixture.test'};
+ const unknown=await notify({event:'unit_failed',unit:'quote-backup.service'},env,transport);assert.equal(unknown.outcome,'outcome_unknown');assert.equal(calls,1);assert.ok(!JSON.stringify(unknown).includes('secret'));
+ const rejected=await notify({event:'unit_failed',unit:'quote-backup.service'},env,async()=>({ok:false,status:302}));assert.equal(rejected.outcome,'rejected');assert.equal(rejected.httpStatus,302);
+ await assert.rejects(()=>notify({event:'secret-event',unit:'quote-backup.service'},env,transport),/invalid_alert_event/);
+});
+test('systemd backup failure points to a shipped alert unit with optional protected alert configuration',()=>{
+ const unit=readFileSync('deploy/quote-ops-alert@.service','utf8'),compose=readFileSync('deploy/compose.yaml','utf8');
+ assert.match(unit,/EnvironmentFile=-\/etc\/quote\/ops-alert.env/);assert.match(unit,/--no-deps ops-alert/);assert.match(unit,/unit-failed %i/);assert.match(compose,/ops-alert:/);assert.match(compose,/OPS_ALERT_DRIVER:.*disabled/);
+});
+test('backup tool and remote failures preserve safe stage records without raw provider or credential text',async()=>{
+ const {mkdtemp,writeFile,chmod,mkdir,rm}=await import('node:fs/promises');const {join}=await import('node:path');const {tmpdir}=await import('node:os');
+ const {backup}=require('../../../scripts/deployment-backup.cjs');const dir=await mkdtemp(join(tmpdir(),'backup-stage-')),bin=join(dir,'bin');await mkdir(bin);
+ const fake=async(name:string,body:string)=>{const file=join(bin,name);await writeFile(file,'#!/bin/sh\n'+body+'\n');await chmod(file,0o700);};
+ const env={BACKUP_DATABASE_URL:'postgresql://backup:secret-password@no-network/fixture',BACKUP_AGE_RECIPIENTS_FILE:join(dir,'recipients'),BACKUP_SCOPE:'fixture',BACKUP_COS_BUCKET:'backup-fixture',COS_BUCKET:'files-fixture',BACKUP_WORK_DIR:join(dir,'work')};const oldPath=process.env.PATH;
+ try{
+  process.env.PATH=bin+':'+oldPath;await fake('pg_dump','echo secret-password >&2; exit 7');
+  await assert.rejects(()=>backup(env,{}),(error:any)=>{assert.deepEqual(error.record,{event:'backup_failed',stage:'dump',reason:'tool_failed',tool:'pg_dump',exitCode:7});assert.ok(!JSON.stringify(error).includes('secret-password'));return true;});
+  await fake('pg_dump','while [ "$#" -gt 0 ]; do if [ "$1" = "--file" ]; then shift; printf fixture > "$1"; exit 0; fi; shift; done; exit 1');await fake('pg_restore','exit 0');await fake('age','while [ "$#" -gt 0 ]; do if [ "$1" = "--output" ]; then shift; target="$1"; shift; cp "$1" "$target"; exit 0; fi; shift; done; exit 1');
+  await assert.rejects(()=>backup(env,{putFile:async()=>{throw Error('COS secret-password denied at https://private-host.test');}}),(error:any)=>{assert.equal(error.record.stage,'upload_cipher');assert.equal(error.record.reason,'operation_failed');assert.ok(!JSON.stringify(error).includes('secret-password'));assert.ok(!error.message.includes('private-host'));return true;});
+ }finally{process.env.PATH=oldPath;await rm(dir,{recursive:true,force:true});}
+});
+
+test('alert discards provider response bodies without reading sensitive or unbounded content',async()=>{
+ const {notify}=require('../../../scripts/deployment-alert.cjs');let cancelled=false;
+ const result=await notify({event:'unit_failed',unit:'quote-backup.service'},{OPS_ALERT_DRIVER:'webhook',OPS_ALERT_WEBHOOK_URL:'https://alerts.fixture.test'},async()=>({ok:true,status:200,body:{cancel:async()=>{cancelled=true;}}}));
+ assert.equal(result.outcome,'accepted');assert.equal(cancelled,true);
+});
+test('restore and remote freshness diagnostics identify failure stages without raw errors',async()=>{
+ const {mkdtemp,writeFile,rm}=await import('node:fs/promises');const {join}=await import('node:path');const {tmpdir}=await import('node:os');
+ const {restore}=require('../../../scripts/deployment-restore.cjs'),{freshness}=require('../../../scripts/deployment-backup-freshness.cjs');
+ const dir=await mkdtemp(join(tmpdir(),'restore-stage-'));
+ try{const file=join(dir,'backup.dump.age'),manifest=join(dir,'backup.json');await writeFile(file,'fixture');await writeFile(manifest,JSON.stringify({version:1,bytes:7,sha256:'a'.repeat(64)}));
+  await assert.rejects(()=>restore({RESTORE_BACKUP_FILE:file,RESTORE_MANIFEST_FILE:manifest,RESTORE_TARGET_DATABASE:'quote_restore_fixture',RESTORE_ADMIN_URL:'postgresql://secret-password@127.0.0.1:1/postgres',RESTORE_AGE_IDENTITY_FILE:join(dir,'missing'),RESTORE_CONFIRM:'CREATE_NEW_ISOLATED_DATABASE'}),(error:any)=>{assert.equal(error.record.stage,'verify_checksum');assert.equal(error.record.reason,'backup_checksum_mismatch');return true;});
+  await assert.rejects(()=>freshness({BACKUP_SCOPE:'fixture'},{list:async()=>{throw Error('https://secret-password@private-host');}},Date.now()),(error:any)=>{assert.equal(error.record.stage,'read_manifests');assert.ok(!JSON.stringify(error).includes('secret-password'));return true;});
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('production ingress pins the sole trusted nginx address on an isolated proxy network',()=>{
+ const compose=readFileSync('deploy/compose.yaml','utf8'),nginx=readFileSync('deploy/nginx.conf.template','utf8');
+ assert.match(compose,/TRUSTED_PROXY_IPS: \$\{QUOTE_PROXY_WEB_IP:-172\.30\.90\.2\}/);
+ const api=compose.slice(compose.indexOf('  api:'),compose.indexOf('  heavy-worker:')),web=compose.slice(compose.indexOf('  web:'),compose.indexOf('  migrate:'));
+ assert.match(api,/trusted-proxy:[\s\S]*ipv4_address: \$\{QUOTE_PROXY_API_IP:-172\.30\.90\.3\}/);assert.match(api,/default:/);
+ assert.match(web,/ingress:/);assert.match(web,/trusted-proxy:[\s\S]*ipv4_address: \$\{QUOTE_PROXY_WEB_IP:-172\.30\.90\.2\}/);assert.ok(!/\bdefault:/.test(web));
+ assert.match(compose,/trusted-proxy:[\s\S]*internal: true[\s\S]*subnet:.*172\.30\.90\.0\/29/);
+ assert.match(nginx,/proxy_set_header X-Forwarded-For \$remote_addr;/);assert.match(nginx,/proxy_set_header X-Forwarded-Host \$host;/);
+});

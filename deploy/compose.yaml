@@ -48,6 +48,13 @@ services:
     logging: *logs
   api:
     <<: *app
+    environment:
+      <<: *app-environment
+      TRUSTED_PROXY_IPS: ${QUOTE_PROXY_WEB_IP:-172.30.90.2}
+    networks:
+      default:
+      trusted-proxy:
+        ipv4_address: ${QUOTE_PROXY_API_IP:-172.30.90.3}
     command: [sh, -c, 'node scripts/deployment-preflight.cjs && exec node --max-old-space-size=256 apps/api/dist/apps/api/src/main.js']
     mem_limit: 512m
     cpus: '0.60'
@@ -85,6 +92,10 @@ services:
     mem_limit: 96m
     cpus: '0.10'
     ports: ['80:80', '443:443']
+    networks:
+      ingress:
+      trusted-proxy:
+        ipv4_address: ${QUOTE_PROXY_WEB_IP:-172.30.90.2}
     environment:
       QUOTE_DOMAIN: ${QUOTE_DOMAIN:?set actual HTTPS domain}
       NGINX_ENVSUBST_FILTER: ^QUOTE_DOMAIN$
@@ -109,6 +120,22 @@ services:
     mem_limit: 256m
     stdin_open: true
     tty: true
+  ops-alert:
+    image: ${QUOTE_API_IMAGE:-quote-api:local}
+    profiles: [operations]
+    command: [node, scripts/deployment-alert.cjs, unit-failed, quote-backup.service]
+    environment:
+      OPS_ALERT_DRIVER: ${OPS_ALERT_DRIVER:-disabled}
+      OPS_ALERT_WEBHOOK_URL: ${OPS_ALERT_WEBHOOK_URL:-}
+      OPS_ALERT_BEARER_TOKEN: ${OPS_ALERT_BEARER_TOKEN:-}
+      OPS_ALERT_TIMEOUT_MS: ${OPS_ALERT_TIMEOUT_MS:-5000}
+    read_only: true
+    init: true
+    restart: 'no'
+    mem_limit: 96m
+    cpus: '0.10'
+    pids_limit: 24
+    logging: *logs
   backup:
     image: ${QUOTE_BACKUP_IMAGE:-quote-backup:local}
     build:
@@ -127,6 +154,13 @@ services:
       - ${QUOTE_BACKUP_RECIPIENTS_FILE:-/etc/quote/backup-recipients.txt}:/run/backup-recipients.txt:ro
       - ${QUOTE_RESTORE_INPUT_DIR:-/etc/quote/restore-input}:/restore-input:ro
     logging: *logs
+networks:
+  ingress:
+  trusted-proxy:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${QUOTE_PROXY_SUBNET:-172.30.90.0/29}
 volumes:
   postgres-data:
   backup-work:

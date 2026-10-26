@@ -73,3 +73,29 @@ test('档案权限检查等待跨北京时间午夜后，到期筛选、DTO和as
   }finally{release();await pending.catch(()=>{});}
  }
 });
+
+async function historyCatalog(){const item=(await db.query("INSERT INTO items(name) VALUES('黄芪标准品') RETURNING id")).rows[0].id,other=(await db.query("INSERT INTO items(name) VALUES('其他标准品') RETURNING id")).rows[0].id;const variants=[];for(const spec of ['斜片','段'])variants.push((await db.query('INSERT INTO item_variants(item_id,specification) VALUES($1,$2) RETURNING id',[item,spec])).rows[0].id);const otherVariant=(await db.query("INSERT INTO item_variants(item_id,specification) VALUES($1,'斜片') RETURNING id",[other])).rows[0].id;return {item,other,variants,otherVariant};}
+async function historyBind(o:any,item:string,variant:string|null){await db.query('UPDATE purchase_order_lines SET item_id=$2,item_variant_id=$3 WHERE id=$1',[o.line,item,variant]);}
+test('医院历史按规格身份、同商品同文本、同商品降级依次补齐，名称变化仍可匹配且绝不混入别的商品',async()=>{
+ const h=await hospital(),c=await historyCatalog(),exact=await root(h),sameSpec=await root(h),fallback=await root(h),unrelated=await root(h),olderFallback=await root(h);
+ for(const [o,item,variant] of [[exact,c.item,c.variants[0]],[sameSpec,c.item,c.variants[1]],[fallback,c.item,null],[unrelated,c.other,c.otherVariant],[olderFallback,c.item,null]] as const)await historyBind(o,item,variant);
+ await quote(exact,{sentAt:'2026-10-01T01:00:00Z',lines:[{name:'黄芪旧显示名',spec:'旧规格描述'}]});
+ await quote(sameSpec,{sentAt:'2026-10-02T01:00:00Z',lines:[{name:'另一显示名',spec:'  斜片  '}]});
+ await quote(fallback,{sentAt:'2026-10-03T01:00:00Z',lines:[{spec:'段'}]});
+ await quote(unrelated,{sentAt:'2026-10-20T01:00:00Z'});await quote(olderFallback,{sentAt:'2026-10-02T01:00:00Z',lines:[{spec:'整根'}]});
+ const p=await ok(`/sales/price-history?hospitalId=${h.id}&name=新显示名&spec=斜片&unit=kg&itemId=${c.item}&itemVariantId=${c.variants[0]}`);
+ assert.equal(p.match,'catalog_priority');assert.equal(p.itemId,c.item);assert.equal(p.itemVariantId,c.variants[0]);assert.deepEqual(p.items.map((x:any)=>x.orderId),[exact.id,sameSpec.id,fallback.id]);assert.deepEqual(p.items.map((x:any)=>x.match),['variant_exact','item_spec_exact','item_fallback']);assert.equal(p.items[0].lines[0].specDifference,true);assert.equal(p.items[1].lines[0].specDifference,false);assert.equal(p.items[2].lines[0].specDifference,true);assert.equal(p.items[2].lines[0].unitDifference,false);
+ assert.equal((await request(`/sales/price-history?hospitalId=${h.id}&name=药&spec=斜片&unit=kg&itemId=${c.other}&itemVariantId=${c.variants[0]}`)).status,400);
+ assert.equal((await request(`/sales/price-history?hospitalId=${h.id}&name=药&spec=斜片&unit=kg&itemId=${c.item}`,'GET',undefined,C.token)).status,404);
+});
+test('同商品降级如实返回历史单位差异；只绑定商品从同规格文本开始，无绑定仍保留文本精确',async()=>{
+ const h=await hospital(),c=await historyCatalog(),same=await root(h),differentUnit=await root(h),textOnly=await root(h);await historyBind(same,c.item,null);await historyBind(differentUnit,c.item,c.variants[0]);await quote(same);await quote(differentUnit,{sentAt:'2026-10-20T01:00:00Z',lines:[{unit:'g' as any,spec:'细粉'}]});await quote(textOnly,{sentAt:'2026-10-21T01:00:00Z'});
+ const p=await ok(`/sales/price-history?hospitalId=${h.id}&name=不依赖显示名&spec=斜片&unit=kg&itemId=${c.item}`);assert.deepEqual(p.items.map((x:any)=>x.orderId),[same.id,differentUnit.id]);assert.equal(p.items[0].match,'item_spec_exact');assert.equal(p.items[1].match,'item_fallback');assert.equal(p.items[1].lines[0].unit,'g');assert.equal(p.items[1].lines[0].unitDifference,true);assert.equal(p.items[1].lines[0].specDifference,true);
+ const text=await ok(`/sales/price-history?hospitalId=${h.id}&name=黄芪&spec=斜片&unit=kg`);assert.equal(text.match,'text_exact');assert.deepEqual(new Set(text.items.map((x:any)=>x.orderId)),new Set([same.id,textOnly.id]));assert.ok(text.items.every((x:any)=>x.match==='text_exact'));
+ const variantOnly=await ok(`/sales/price-history?hospitalId=${h.id}&name=不依赖显示名&spec=斜片&unit=kg&itemVariantId=${c.variants[0]}`);assert.equal(variantOnly.itemId,c.item);assert.equal(variantOnly.items[0].orderId,same.id);
+});
+test('商品历史先取代表版再匹配，不拿旧版本填精确；同单只保留最佳匹配级别的全部同行',async()=>{
+ const h=await hospital(),c=await historyCatalog(),changed=await root(h),duplicates=await root(h);await historyBind(changed,c.item,c.variants[0]);await quote(changed,{sentAt:'2026-10-01T01:00:00Z'});const rid=(await db.query('INSERT INTO purchase_order_revisions(purchase_order_id,revision_no) VALUES($1,2) RETURNING id',[changed.id])).rows[0].id;await db.query("INSERT INTO purchase_order_lines(revision_id,position,name,spec,quantity,item_id,item_variant_id) VALUES($1,0,'黄芪','斜片',2,$2,$3)",[rid,c.other,c.otherVariant]);await quote(changed,{revisionId:rid,sentAt:'2026-10-21T01:00:00Z'});
+ await historyBind(duplicates,c.item,c.variants[0]);await db.query("INSERT INTO purchase_order_lines(revision_id,position,name,spec,quantity,item_id,item_variant_id) VALUES($1,1,'重复行','斜片',2,$2,$3),($1,2,'段','段',2,$2,$4)",[duplicates.rid,c.item,c.variants[0],c.variants[1]]);const v=await quote(duplicates,{status:'confirmed',confirmed:true,lines:[{}, {name:'重复行',unitPrice:'35.00'},{name:'段',spec:'段'}]});await quote(duplicates,{version:2,sentAt:'2026-10-22T01:00:00Z',lines:[{}, {name:'重复行'},{name:'段',spec:'段'}]});
+ const p=await ok(`/sales/price-history?hospitalId=${h.id}&name=黄芪&spec=斜片&unit=kg&itemId=${c.item}&itemVariantId=${c.variants[0]}`);assert.equal(p.items.length,1);assert.equal(p.items[0].versionId,v.id);assert.equal(p.items[0].match,'variant_exact');assert.equal(p.items[0].lines.length,2);assert.deepEqual(p.items[0].lines.map((x:any)=>x.purchaseLineId),[duplicates.line,(await db.query('SELECT id FROM purchase_order_lines WHERE revision_id=$1 AND position=1',[duplicates.rid])).rows[0].id]);
+});

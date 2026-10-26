@@ -34,11 +34,23 @@ export const priceHistorySql=`WITH eligible AS (
  JOIN LATERAL(SELECT max(recorded_at) AS sent_at FROM quote_sends WHERE version_id=v.id) sends ON sends.sent_at IS NOT NULL
  WHERE o.hospital_id=$3 AND ($2::boolean OR o.sales_user_id=$1 OR h.sales_user_id=$1)
  AND ($4::uuid IS NULL OR o.id<>$4) AND v.status IN('sent','confirmed') AND v.first_sent_at IS NOT NULL AND v.document IS NOT NULL
-), representatives AS (SELECT * FROM eligible WHERE rank=1)
-SELECT rep.*,matched.lines FROM representatives rep
-JOIN LATERAL(SELECT jsonb_agg(jsonb_build_object('purchaseLineId',pl.id,'name',entry.line->>'name','spec',entry.line->>'spec','unit','kg','quantity',entry.line->>'quantity','status',entry.line->>'status','unitPrice',CASE WHEN entry.line->>'status'='missing' THEN NULL ELSE entry.line->>'unitPrice' END) ORDER BY entry.position) AS lines
- FROM jsonb_array_elements(rep.document->'lines') WITH ORDINALITY entry(line,position)
+), representatives AS (SELECT * FROM eligible WHERE rank=1), candidates AS (
+ SELECT rep.order_id,pl.id AS purchase_line_id,pl.item_id,pl.item_variant_id,entry.line,entry.position,
+ CASE WHEN $8::uuid IS NOT NULL AND pl.item_variant_id=$8 AND entry.line->>'unit'='kg' THEN 1
+ WHEN $7::uuid IS NOT NULL AND pl.item_id=$7 AND lower(regexp_replace(btrim(COALESCE(entry.line->>'spec','')),'[[:space:]]+',' ','g'))=$6 AND entry.line->>'unit'='kg' THEN 2
+ WHEN $7::uuid IS NOT NULL AND pl.item_id=$7 THEN 3
+ WHEN $7::uuid IS NULL AND $8::uuid IS NULL AND lower(regexp_replace(btrim(entry.line->>'name'),'[[:space:]]+',' ','g'))=$5
+ AND lower(regexp_replace(btrim(COALESCE(entry.line->>'spec','')),'[[:space:]]+',' ','g'))=$6 AND entry.line->>'unit'='kg' THEN 4 END AS match_rank
+ FROM representatives rep CROSS JOIN LATERAL jsonb_array_elements(rep.document->'lines') WITH ORDINALITY entry(line,position)
  JOIN purchase_order_lines pl ON pl.revision_id=rep.revision_id AND pl.position=(entry.line->>'position')::integer-1
- WHERE lower(regexp_replace(btrim(entry.line->>'name'),'[[:space:]]+',' ','g'))=$5
- AND lower(regexp_replace(btrim(entry.line->>'spec'),'[[:space:]]+',' ','g'))=$6 AND entry.line->>'unit'='kg') matched ON matched.lines IS NOT NULL
-ORDER BY rep.sent_at DESC,rep.order_no DESC,rep.order_id DESC LIMIT 3`;
+), ranked AS (SELECT *,min(match_rank) OVER(PARTITION BY order_id) AS best_rank FROM candidates WHERE match_rank IS NOT NULL), matched AS (
+ SELECT order_id,best_rank,jsonb_agg(jsonb_build_object(
+ 'purchaseLineId',purchase_line_id,'itemId',item_id,'itemVariantId',item_variant_id,'name',line->>'name','spec',COALESCE(line->>'spec',''),
+ 'unit',COALESCE(line->>'unit',''),'quantity',line->>'quantity','status',line->>'status','unitPrice',CASE WHEN line->>'status'='missing' THEN NULL ELSE line->>'unitPrice' END,
+ 'match',CASE best_rank WHEN 1 THEN 'variant_exact' WHEN 2 THEN 'item_spec_exact' WHEN 3 THEN 'item_fallback' ELSE 'text_exact' END,
+ 'specDifference',lower(regexp_replace(btrim(COALESCE(line->>'spec','')),'[[:space:]]+',' ','g')) IS DISTINCT FROM $6,
+ 'unitDifference',(line->>'unit') IS DISTINCT FROM 'kg') ORDER BY position) AS lines
+ FROM ranked WHERE match_rank=best_rank GROUP BY order_id,best_rank
+)
+SELECT rep.*,matched.best_rank,matched.lines FROM representatives rep JOIN matched USING(order_id)
+ORDER BY matched.best_rank,rep.sent_at DESC,rep.order_no DESC,rep.order_id DESC LIMIT 3`;
