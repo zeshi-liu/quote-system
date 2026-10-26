@@ -3,16 +3,18 @@ import type {ArchiveAudit,QuoteCell,DraftLineInput} from '../../../../packages/c
 import {uuid,amount,date} from '../core/validation';
 
 const auditLabels:Record<string,string>={
+ 'receivables.payment-add':'登记回款','receivables.payment-void':'作废回款',
  'purchase.create':'手工录入采购单','purchase.save-lines':'保存采购校对','purchase.freeze':'冻结采购修订',
  'supplier.task-create':'创建厂家询价','supplier.link-generate':'生成厂家链接','supplier.link-regenerate':'重新生成厂家链接','supplier.link-requote':'重新询价','supplier.cancel':'取消厂家询价','supplier.submit':'厂家提交报价',
  'pricing.enter':'进入计价','pricing.save':'保存计价','pricing.adopt':'采用最新厂家报价',
  'delivery.export-prepared':'申请导出','delivery.export-bound':'导出文件生成成功','delivery.mark-sent':'登记发送','delivery.confirm':'登记医院实际确认','delivery.create-next':'创建下一报价版本','delivery.void':'作废报价','delivery.confirm-void-other':'确认后作废其他报价'
 };
 const summaryKeys:Record<string,string[]>={
+ 'receivables.payment-add':['amount','paidDate','remark'],'receivables.payment-void':['amount','paidDate','reason'],
  'purchase.save-lines':['lineCount'],'supplier.task-create':['slot'],'supplier.link-regenerate':['reason'],'supplier.link-requote':['reason'],'supplier.cancel':['reason'],
  'delivery.mark-sent':['channel','remark'],'delivery.confirm':['actual','recordedAt','backfillReason'],'delivery.create-next':['reason'],'delivery.void':['reason']
 };
-const fieldLabels:Record<string,string>={lineCount:'采购行数',slot:'厂家任务位',reason:'原因',channel:'发送渠道',remark:'备注',actual:'实际确认时间',recordedAt:'登记时间',backfillReason:'补录原因'};
+const fieldLabels:Record<string,string>={amount:'金额',paidDate:'实际回款日期',lineCount:'采购行数',slot:'厂家任务位',reason:'原因',channel:'发送渠道',remark:'备注',actual:'实际确认时间',recordedAt:'登记时间',backfillReason:'补录原因'};
 
 // z.object strips unknown keys; do not expose raw details or arbitrary future JSON fields.
 const pricingChange=z.object({purchaseLineId:uuid,baseSupplierQuoteLineId:uuid.nullable(),selectionMode:z.enum(['auto','manual']),markupMethod:z.enum(['fixed','percent','multiplier']).nullable(),parameterValue:amount.nullable(),finalPrice:amount.nullable(),finalConfirmed:z.boolean(),lossReason:z.string().max(500),publicRemark:z.string().max(500).optional()});
