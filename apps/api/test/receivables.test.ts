@@ -89,8 +89,44 @@ test('作废订单回款拒绝，completed例外不开放其他写操作',async(
 test('数据库保护原始金额日期备注署名及更正关联；作废信息仅写一次且不可删除恢复',async()=>{const o=await fixture(),r=await add(o,'10');assert.equal(r.status,200);const id=r.data.payment.id;for(const sql of ["UPDATE payment_records SET amount=1 WHERE id=$1","UPDATE payment_records SET paid_date='2026-01-01' WHERE id=$1","UPDATE payment_records SET remark='覆盖' WHERE id=$1","UPDATE payment_records SET recorded_by_name_snapshot='覆盖' WHERE id=$1","DELETE FROM payment_records WHERE id=$1"])await assert.rejects(()=>db.query(sql,[id]));await ok(path(o)+`/payments/${id}/void`,'POST',{reason:'留痕'});for(const sql of ["UPDATE payment_records SET status='active' WHERE id=$1","UPDATE payment_records SET void_reason='改原因' WHERE id=$1","UPDATE payment_records SET voided_at=now() WHERE id=$1"])await assert.rejects(()=>db.query(sql,[id]));});
 test('北京时间跨日后才校验实际回款日期与台账asOf',async()=>{const o=await fixture('100','2026-10-24'),actor=await app.get((await import('../src/auth/auth')).AuthService).authenticate(A.token);const {ReceivableService}=await import('../src/receivables/service');const store=new CoreStore(db,()=>now),active=store.active.bind(store);let entered!:()=>void,release!:()=>void;const barrier=new Promise<void>(r=>{release=r;}),seen=new Promise<void>(r=>{entered=r;});store.active=async(c,a)=>{await active(c,a);entered();await barrier;};now=new Date('2026-10-23T15:59:59Z');const pending=new ReceivableService(store).list(actor,{hospitalId:o.h.id});await seen;now=new Date('2026-10-23T16:00:01Z');release();const p=await pending;assert.equal(p.asOf,now.toISOString());assert.equal(p.items[0].dueState,'due');assert.equal((await request(path(o)+'/payments','POST',payment('1','2026-10-24'))).status,200);});
 
-async function queuedWrites(o:any,actions:(()=>Promise<any>)[]){const blocker=await db.pool.connect();await blocker.query('BEGIN');await blocker.query('SELECT id FROM purchase_orders WHERE id=$1 FOR UPDATE',[o.id]);const pending=actions.map(action=>action());try{const until=Date.now()+3500;for(;;){const wait=(await db.query("SELECT count(*)::integer AS n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT id FROM purchase_orders WHERE id=$1%'" )).rows[0].n;if(wait===actions.length)break;if(Date.now()>until)throw new Error('SQL锁屏障未观察到全部等待者');await new Promise<void>(r=>setImmediate(r));}await blocker.query('COMMIT');return await Promise.all(pending);}finally{await blocker.query('ROLLBACK');blocker.release();await Promise.allSettled(pending);}}
-test('原生PostgreSQL并发各80对100仅成功一笔；作废和新增共用同单锁且无负余额',{skip:process.env.TEST_DB_MODE==='pglite'},async()=>{const o=await fixture(),results=await queuedWrites(o,[()=>add(o,'80'),()=>add(o,'80')]);assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);const current=await ok(path(o));assert.equal(current.receivable.balance,'20.00');const p=current.payments[0],mixed=await queuedWrites(o,[()=>request(path(o)+`/payments/${p.id}/void`,'POST',{reason:'并发纠错'}),()=>add(o,'80')]);assert.ok(mixed.every(r=>[200,400].includes(r.status)));const final=await ok(path(o));assert.ok(Number(final.receivable.balance)>=0);assert.equal(Number(final.receivable.paid)+Number(final.receivable.balance),100);});
+const rootLockQuery='SELECT id FROM purchase_orders WHERE id=$1 FOR UPDATE';
+async function queuedWrites(o:any,actions:(()=>Promise<any>)[]){
+ const blocker=await db.pool.connect(),blockerPid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+ await blocker.query('BEGIN');await blocker.query(rootLockQuery,[o.id]);
+ const pending=actions.map(action=>action());
+ try{
+  const until=Date.now()+3500;
+  for(;;){
+   // Follow soft blockers too: the second root waiter can queue behind the first.
+   const blocked=(await db.query(`WITH RECURSIVE blocked(pid) AS (
+    SELECT $1::integer
+    UNION
+    SELECT a.pid FROM pg_stat_activity a JOIN blocked b ON b.pid=ANY(pg_blocking_pids(a.pid)) WHERE a.datname=current_database()
+   ) SELECT a.pid,a.query,a.wait_event_type,a.wait_event,pg_blocking_pids(a.pid) AS blockers
+   FROM pg_stat_activity a JOIN blocked b ON b.pid=a.pid WHERE a.pid<>$1 ORDER BY a.pid`,[blockerPid])).rows;
+   const waiting=blocked.filter(row=>row.wait_event_type==='Lock'&&row.query===rootLockQuery);
+   if(waiting.length===actions.length)break;
+   if(Date.now()>until)throw new Error('SQL锁屏障未观察到全部等待者 '+JSON.stringify({blockerPid,expected:actions.length,rootWaiters:waiting.length,blocked}));
+   await new Promise<void>(r=>setImmediate(r));
+  }
+  await blocker.query('COMMIT');return await Promise.all(pending);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await Promise.allSettled(pending);}
+}
+test('原生PostgreSQL并发各80对100仅成功一笔；作废和新增共用同单锁且无负余额',{skip:process.env.TEST_DB_MODE==='pglite'},async()=>{
+ // Separate sessions of the same salesperson avoid serializing at authenticate's session UPDATE before the root lock.
+ const pc=await loginPc(A),pcSessionId=(await db.query('SELECT id FROM auth_sessions WHERE token_hash=$1',[secretHash(pcRaw(pc.client))])).rows[0].id;
+ assert.equal(pc.user.id,A.id);assert.notEqual(pcSessionId,A.sessionId);
+ for(let round=0;round<3;round++){
+  const o=await fixture(),add80=(auth:string|PcClient)=>request(path(o)+'/payments','POST',payment('80'),auth);
+  const results=await queuedWrites(o,[()=>add80(A.token),()=>add80(pc.client)]);
+  assert.deepEqual(results.map(r=>r.status).sort(),[200,400],JSON.stringify(results));
+  const current=await ok(path(o));assert.equal(current.receivable.balance,'20.00');
+  const p=current.payments[0],mixed=await queuedWrites(o,[()=>request(path(o)+`/payments/${p.id}/void`,'POST',{reason:'并发纠错'},A.token),()=>add80(pc.client)]);
+  assert.equal(mixed[0].status,200,JSON.stringify(mixed));assert.ok([200,400].includes(mixed[1].status),JSON.stringify(mixed));
+  const final=await ok(path(o));assert.equal(final.payments.find((record:any)=>record.id===p.id).status,'void');
+  assert.ok(Number(final.receivable.balance)>=0);assert.equal(Number(final.receivable.paid)+Number(final.receivable.balance),100);
+ }
+});
 test('应收台账安全返回当前订单负责销售员和原单引用',async()=>{const o=await fixture();const detail=await ok(path(o));assert.deepEqual(detail.receivable.owner,{id:A.id,name:A.name});assert.deepEqual(detail.originalOrder,{id:o.id,orderNo:detail.receivable.orderNo});assert.deepEqual((await ok(`/sales/receivables?hospitalId=${o.h.id}`)).items[0].owner,{id:A.id,name:A.name});});
 test('支付记录必须先登记为有效，不能用INSERT伪造作废流程',async()=>{const o=await fixture();await assert.rejects(()=>db.query("INSERT INTO payment_records(receivable_id,amount,paid_date,recorded_by,recorded_by_name_snapshot,recorded_at,status,void_reason,voided_by,voided_by_name_snapshot,voided_at) VALUES($1,1,'2026-10-23',$2,'销售甲',$3,'void','绕过登记',$2,'销售甲',$3)",[o.receivableId,A.id,instant]));});
 test('未来历史累计记录保留未知支付日期、有效唯一性和更正类型，普通API不能创建该类型',async()=>{const o=await fixture(),input=[o.receivableId,A.id,instant],sql="INSERT INTO payment_records(receivable_id,record_type,amount,paid_date,recorded_by,recorded_by_name_snapshot,recorded_at) VALUES($1,'historical_opening',30,NULL,$2,'历史登记姓名',$3) RETURNING id",opening=(await db.query(sql,input)).rows[0].id;await assert.rejects(()=>db.query(sql,input));const d=await ok(path(o));assert.equal(d.receivable.paid,'30.00');assert.equal(d.payments[0].paidDate,null);assert.equal(d.payments[0].recordedByName,'历史登记姓名');await ok(path(o)+`/payments/${opening}/void`,'POST',{reason:'累计核对有误'});const corrected=await add(o,'20',randomUUID(),{correctsPaymentRecordId:opening,paidDate:null});assert.equal(corrected.status,200);assert.equal(corrected.data.payment.paidDate,null);assert.equal(corrected.data.payment.recordedAt,instant.toISOString());assert.equal(corrected.data.payment.recordType,'historical_opening');assert.equal(corrected.data.receivable.paid,'20.00');assert.equal((await request(path(o)+'/payments','POST',{...payment('1'),recordType:'historical_opening'})).status,400);});
