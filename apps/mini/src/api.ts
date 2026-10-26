@@ -1,3 +1,4 @@
+import {assertPaymentReceipt,receivableOperationTarget} from '@quote/receivables-client';
 import { computed, ref } from 'vue';
 import { exportJobStorageKey, resolveDownloadUrl } from './delivery-domain';
 import type { Session } from '@quote/contracts';
@@ -20,6 +21,7 @@ export async function mutate<T>(label:string,path:string,method:'POST'|'PUT',dat
  return retryOperation<T>();
 }
 function rememberOperationResult(operation:StoredOperation|null,result:unknown){
+ if(receivableOperationTarget(operation)){try{assertPaymentReceipt(operation!,result);}catch{throw new ApiFailure('PAYMENT_RECEIPT_UNKNOWN','回款回执尚未核实，请保留原操作继续核对。',true);}return;}
  const versionId=exportVersionForOperation(operation);if(!versionId)return;
  const receipt=result as {orderId?:unknown;versionId?:unknown;jobId?:unknown}|null;
  if(!receipt||receipt.versionId!==versionId||typeof receipt.orderId!=='string'||!receipt.orderId.trim()||typeof receipt.jobId!=='string'||!receipt.jobId.trim())throw new ApiFailure('EXPORT_RECEIPT_UNKNOWN','导出已受理但任务回执尚未核实，请保留原操作继续核对。',true);

@@ -3,3 +3,5 @@
 .section-tabs{display:flex;gap:20px;margin:5px 0 10px;overflow:auto}.section-tabs button{border:0;background:transparent;font-size:12px;padding:8px 0;color:#7b8a7f;white-space:nowrap}.section-tabs .selected{color:#215f46;text-decoration:underline;text-underline-offset:7px}.references{margin-top:16px;color:#7d8c80;font-size:11px}.references summary{cursor:pointer;display:list-item}.references .panel-facts{font-size:10px}
 
 .filter-note{font-size:12px;line-height:1.7;color:#215f46;background:#eef5f0;padding:10px 12px;margin:14px 0;border-left:2px solid #215f46}
+
+.main-navigation{display:flex;gap:28px;border-bottom:1px solid #dce5df;margin-top:10px}.main-navigation button{border:0;border-bottom:2px solid transparent;border-radius:0;padding:18px 0;color:#74837a}.main-navigation .selected{color:#215f46;border-bottom-color:#215f46}textarea{font:inherit;color:#24382f}
