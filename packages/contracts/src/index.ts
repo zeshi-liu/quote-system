@@ -25,3 +25,5 @@ export interface ApiError { code: string; message: string; details?: unknown }
 export interface ApiEnvelope<T> { data: T; meta: {requestId: string} }
 export * from './delivery';
 export * from './archive';
+
+export * from './receivables';
