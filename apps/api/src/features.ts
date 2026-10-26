@@ -36,6 +36,7 @@ export class FeatureService {
   if(actor.role==='hospital')ensure(this.hospitalPurpose(path),403,'HOSPITAL_PURPOSE_FORBIDDEN','医院仅可使用本人采购需求入口');
   if(method==='POST'&&(m=path.match(/^\/sales\/purchase-orders\/([^/]+)\/(revisions|void)$/)))return {data:await (m[2]==='revisions'?this.lifecycle.revise(actor,key,m[1],body):this.lifecycle.void(actor,key,m[1],body))};
   if(path==='/sales/dashboard'&&method==='GET')return {data:await this.dashboard.get(actor)};
+  if(path==='/sales/dashboard/notices/ack'&&method==='POST')return {data:await this.dashboard.acknowledge(actor,body)};
   if(path==='/hospital/bootstrap'&&method==='GET')return {data:await this.hospital.bootstrap(actor)};
   if(path==='/hospital/purchase-suggestions'&&method==='GET')return {data:await this.hospital.suggestions(actor)};
   if(path==='/hospital/purchase-orders'){if(method==='GET')return {data:await this.hospital.list(actor,query)};if(method==='POST')return {data:await this.hospital.create(actor,key,body)};}
