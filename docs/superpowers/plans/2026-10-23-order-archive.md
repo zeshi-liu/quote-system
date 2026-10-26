@@ -47,7 +47,7 @@ Files: `apps/pc/`（Vue3/Vite实际PC工程），`apps/mini/src/components/Order
 
 - [x] 后端及前端分别需求审查→修复→质量审查，不将实施者自检替代独立审查。
 - [x] 浏览器虚构数据验证PC密码登录、筛选/分页/返回、旧单只读、小程序同结果、历史价格只读、管理员权限；本地PGlite结果与标准PostgreSQL CI分开记录。
-- [ ] 更新实际工程/指南与验收范围，保留用户既有修改。同步独立分支`codex/order-archive`，PR以`codex/quote-delivery`为基线（PR#2尚未合并）；创建并附加草稿PR，等待标准PostgreSQL CI。不擅自合并已有PR。
+- [x] 更新实际工程/指南与验收范围，保留用户既有修改。同步独立分支`codex/order-archive`，PR以`codex/quote-delivery`为基线（PR#2尚未合并）；创建并附加草稿PR，核对标准PostgreSQL 17.11 CI通过。不擅自合并已有PR。
 
 ## 计划自检
 
