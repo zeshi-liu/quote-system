@@ -9,11 +9,12 @@ import { PurchaseService } from '../core/purchases';
 import { SupplierService } from '../core/suppliers';
 import { DeliveryService } from '../delivery/service';
 import { PricingService } from '../core/pricing';
+import { ReceivableService } from '../receivables/service';
 import { ArchiveService } from '../archive/service';
 import { BusinessError,ensure } from '../core/errors';
 @Controller('/api/v1')
 export class ApiController {
- constructor(@Inject(AuthService) readonly auth:AuthService,@Inject(CoreStore) readonly store:CoreStore,@Inject(PurchaseService) readonly purchases:PurchaseService,@Inject(SupplierService) readonly suppliers:SupplierService,@Inject(PricingService) readonly pricing:PricingService,@Inject(DeliveryService) readonly delivery:DeliveryService,@Inject(ArchiveService) readonly archive:ArchiveService,@Inject(PcAuthService) readonly pc:PcAuthService){}
+ constructor(@Inject(AuthService) readonly auth:AuthService,@Inject(CoreStore) readonly store:CoreStore,@Inject(PurchaseService) readonly purchases:PurchaseService,@Inject(SupplierService) readonly suppliers:SupplierService,@Inject(PricingService) readonly pricing:PricingService,@Inject(DeliveryService) readonly delivery:DeliveryService,@Inject(ArchiveService) readonly archive:ArchiveService,@Inject(PcAuthService) readonly pc:PcAuthService,@Inject(ReceivableService) readonly receivables:ReceivableService){}
  @All('*path')
  async route(@Req() req:Request,@Res() res:Response){
   const requestId=randomUUID();res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
@@ -48,6 +49,10 @@ export class ApiController {
      const actor=await this.pc.authenticate(req);
      if(path==='/auth/me'&&method==='GET')result={id:actor.id,name:actor.name,role:actor.role,channel:actor.channel};
      else if(path==='/auth/logout'&&method==='POST'){result=await this.auth.logout(actor);if(actor.channel==='pc')this.pc.clear(req,res);}
+     else if(path==='/sales/receivables'&&method==='GET')result=await this.receivables.list(actor,req.query);
+     else if((match=path.match(/^\/sales\/receivables\/([^/]+)$/))&&method==='GET')result=await this.receivables.detail(actor,match[1]);
+     else if((match=path.match(/^\/sales\/receivables\/([^/]+)\/payments$/))&&method==='POST')result=await this.receivables.add(actor,key,match[1],req.body);
+     else if((match=path.match(/^\/sales\/receivables\/([^/]+)\/payments\/([^/]+)\/void$/))&&method==='POST')result=await this.receivables.void(actor,key,match[1],match[2],req.body);
      else if(path==='/sales/order-archive'&&method==='GET')result=await this.archive.list(actor,req.query);
      else if(path==='/sales/order-archive/hospitals'&&method==='GET')result=await this.archive.hospitals(actor);
      else if((match=path.match(/^\/sales\/order-archive\/([^/]+)$/))&&method==='GET')result=await this.archive.detail(actor,match[1]);
