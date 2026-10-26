@@ -45,7 +45,7 @@ Files: 新增 `packages/receivables-client/` 的共享状态与测试，`apps/pc
 ## Task 3：交付及验证分层
 
 - [x] 更新实际启动、功能边界与结果记录；本地 PGlite、浏览器、标准 PostgreSQL CI、真实微信/COS/云分别报告。
-- [ ] 同步 `codex/receivables` 并建立基于 `codex/order-archive` 的草稿 PR；CI 同时覆盖新 branch/stacked PR，最终文件树核对一致。不自动合并。
+- [x] 同步 `codex/receivables` 并建立基于 `codex/order-archive` 的草稿 PR；CI 同时覆盖新 branch/stacked PR，最终文件树核对一致。不自动合并。
 - [x] 最终集成审查通过，列出本批事实与后续通知/账期/补录边界，保留工作树供继续开发。
 
 ## 计划自检
