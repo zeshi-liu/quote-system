@@ -89,6 +89,9 @@ importers:
       '@dcloudio/uni-mp-weixin':
         specifier: 3.0.0-5020620260917001
         version: 3.0.0-5020620260917001(debug@4.4.3(supports-color@5.5.0))(postcss@8.5.31)(rollup@4.64.12)(supports-color@5.5.0)(vue@3.5.22(typescript@5.9.3))
+      '@quote/archive-client':
+        specifier: workspace:*
+        version: link:../../packages/archive-client
       '@quote/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -115,6 +118,28 @@ importers:
         specifier: ^3.1.0
         version: 3.3.13(typescript@5.9.3)
 
+  apps/pc:
+    dependencies:
+      '@quote/archive-client':
+        specifier: workspace:*
+        version: link:../../packages/archive-client
+      '@quote/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      vue:
+        specifier: 3.5.22
+        version: 3.5.22(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: 5.0.5
+        version: 5.0.5(vite@5.2.8(@types/node@24.19.2)(terser@5.51.2))(vue@3.5.22(typescript@5.9.3))
+      vite:
+        specifier: 5.2.8
+        version: 5.2.8(@types/node@24.19.2)(terser@5.51.2)
+      vue-tsc:
+        specifier: ^3.1.0
+        version: 3.3.13(typescript@5.9.3)
+
   apps/supplier-h5:
     dependencies:
       '@quote/contracts':
@@ -133,6 +158,12 @@ importers:
       vue-tsc:
         specifier: ^3.1.0
         version: 3.3.13(typescript@5.9.3)
+
+  packages/archive-client:
+    dependencies:
+      '@quote/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/contracts: {}
 

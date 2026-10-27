@@ -6,11 +6,13 @@
 
 - `apps/mini/`：uni-app/Vue 3/TypeScript 销售小程序，另可构建同源 H5 用于开发联调。
 - `apps/supplier-h5/`：厂家的独立 Vue 3 报价表单。
+- `apps/pc/`：内部账号密码登录的 PC 历史订单档案，销售与管理员按权限只读查阅。
 - `apps/api/`：NestJS、PostgreSQL 迁移、权限、厂家链接、完整报价与计价保存、报价导出任务、发送确认和订单应收基础。
 - `packages/contracts/`：各端共用接口类型。
+- `packages/archive-client/`：PC 与小程序共用的档案查询、展示和请求状态处理。
 - [实施计划](docs/implementation-mini-core-v1.md)及[试用与真机准备指南](docs/mini-core-trial-guide.md)。
 
-当前工程已接入“手工采购校对 → 冻结 → 两家厂家 H5 报价 → 表格比价 → 计价保存 → PDF/Excel 导出 → 线下发送登记 → 医院实际确认 → 唯一应收”。私有 COS 适配已编写，真实接入尚待验证；回款编辑、历史补录、分析、OCR 和完整 PC/管理员端仍按后续批次实施。此次开发及验证边界见 [报价交付说明](docs/quote-delivery-trial-guide.md)。用户正在注册小程序，真实 AppID 绑定与手机预览未完成。本机原生 PostgreSQL 启动异常，离线功能联调使用开发用 PGlite；标准 PostgreSQL 多连接事务须另行验证，不能用离线通过替代。
+当前工程已接入“手工采购校对 → 冻结 → 两家厂家 H5 报价 → 表格比价 → 计价保存 → PDF/Excel 导出 → 线下发送登记 → 医院实际确认 → 唯一应收”，并增加 PC/小程序历史订单档案和计价中的同院最近三单参考。私有 COS 适配已编写，真实接入尚待验证；回款编辑、历史补录、分析、OCR 和完整 PC/管理员端仍按后续批次实施。各批开发及验证边界见 [报价交付说明](docs/quote-delivery-trial-guide.md)与[历史档案说明](docs/order-archive-trial-guide.md)。用户正在注册小程序，真实 AppID 绑定与手机预览未完成。本机原生 PostgreSQL 启动异常，离线功能联调使用开发用 PGlite；标准 PostgreSQL CI 与本地验证分别记录，不能用离线通过替代。
 
 ## 主要文档
 
