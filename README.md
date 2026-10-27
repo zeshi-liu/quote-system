@@ -15,7 +15,9 @@
 
 当前工程覆盖“采购录入/解析与人工校对 → 冻结 → 两家厂家 H5 报价 → 表格比价与最终价确认 → PDF/Excel 导出 → 线下发送登记 → 医院实际确认 → 唯一应收 → 分次回款与留痕更正”。另提供历史纸单核实、账期及异常、每日提醒适配、五类图表与快照下钻、管理员基础资料/来源批次和离职专项交接。所有关键金额和权限由服务端校验。
 
-逐项实现与验证状态见 [PRD v3 工程覆盖与验收边界](docs/mvp-coverage-2026-10-26.md)，部署及恢复步骤见 [部署手册](docs/deployment-runbook-v1.md)。真实 AppID、微信手机号与订阅授权、COS/OCR、HTTPS 云端、Docker/systemd 运行与恢复演练仍须配置和验收。当前未采购或部署云资源，当前功能代码的 GitHub 标准 PostgreSQL、界面、类型及构建检查已通过；草稿 PR 保持待合并。
+逐项实现与验证状态见 [PRD v3 工程覆盖与验收边界](docs/mvp-coverage-2026-10-26.md)，部署及恢复步骤见 [部署手册](docs/deployment-runbook-v1.md)。真实 AppID、微信手机号与订阅授权、COS/OCR、HTTPS 云端、Docker/systemd 运行与恢复演练仍须配置和验收。当前未采购或部署云资源。2026-10-26 历史基线已通过 GitHub 标准 PostgreSQL 检查；2026-10-27 修复代码也已通过[标准 PostgreSQL、370 项界面及全部构建检查](https://github.com/zeshi-liu/quote-system/actions/runs/40431804029)，最新文档提交仍须按 PR Checks 核对，草稿 PR 保持待合并。
+
+2026-10-27 已在虚构隔离数据中完成报价到回款的实际页面主流程，并修复北京时间、PC 刷新和医院确认复核；金额及文件核对边界见 [浏览器验收记录](docs/browser-acceptance-2026-10-27.md)。UI 370/370 通过，真实微信注册及云端验收仍待外部条件。
 
 本机原生 PostgreSQL 启动异常，离线联调使用 PGlite；它不证明标准 PostgreSQL 多连接竞争、备份恢复或生产可用性。旧阶段证据保留在 [报价交付](docs/quote-delivery-trial-guide.md)、[历史档案](docs/order-archive-trial-guide.md)及[回款台账](docs/receivables-trial-guide.md)说明中；当前范围以覆盖表为准。
 
