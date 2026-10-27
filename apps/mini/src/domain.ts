@@ -12,3 +12,5 @@ export function recommendation(price:string, method:MarkupMethod, parameter:stri
  if(amount>maxCents)throw new Error('计算结果超出允许范围');
  return (amount/100n).toString()+'.'+(amount%100n).toString().padStart(2,'0');
 }
+export function canManageOrder(order:{writable:boolean;status:string}):boolean{return order.writable&&!['completed','voided'].includes(order.status);}
+export function pricingInputs(lines:import('@quote/contracts').DraftLineInput[]):import('@quote/contracts').DraftLineInput[]{return lines.map(l=>({purchaseLineId:l.purchaseLineId,baseSupplierQuoteLineId:l.baseSupplierQuoteLineId,selectionMode:l.selectionMode,markupMethod:l.markupMethod,parameterValue:l.parameterValue,finalPrice:l.finalPrice||null,finalConfirmed:l.finalConfirmed,lossReason:l.lossReason,publicRemark:l.publicRemark||''}));}

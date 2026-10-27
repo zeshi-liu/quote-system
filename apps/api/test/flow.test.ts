@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import EmbeddedPostgres from 'embedded-postgres';
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
+import {offlineSocketOptions} from '../../../scripts/pglite-options';
 import { Database } from '../src/db/database';
 import { createApp } from '../src/app';
 import { seedTrial } from '../../../scripts/seed-trial';
@@ -41,7 +42,7 @@ before(async()=>{
  process.env.LC_ALL='C';
  dir=await mkdtemp(join(tmpdir(),'quote-core-test-'));
  if(process.env.TEST_DB_MODE==='pglite'){
-  wasm=await PGlite.create(join(dir,'wasm'));wasmServer=new PGLiteSocketServer({db:wasm,port:25439,host:'127.0.0.1'});await wasmServer.start();db=new Database('postgresql://postgres:postgres@127.0.0.1:25439/postgres',1);
+  wasm=await PGlite.create(join(dir,'wasm'));wasmServer=new PGLiteSocketServer({db:wasm,port:25439,...offlineSocketOptions});await wasmServer.start();db=new Database('postgresql://postgres:postgres@127.0.0.1:25439/postgres',1);
  }else if(process.env.TEST_DATABASE_URL){
   const url=new URL(process.env.TEST_DATABASE_URL);assert.equal(url.pathname,'/quote_core_test','外部集成测试只允许专用 quote_core_test 数据库');
   externalAdmin=new Database(process.env.TEST_DATABASE_URL);testSchema='core_test_'+randomUUID().replaceAll('-','');await externalAdmin.query('CREATE SCHEMA "'+testSchema+'"');db=new Database(process.env.TEST_DATABASE_URL,8,testSchema);

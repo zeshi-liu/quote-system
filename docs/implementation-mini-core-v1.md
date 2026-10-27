@@ -58,3 +58,7 @@
 - 微信包、销售 H5 及厂家 H5 编译通过；没有 AppID，真实微信身份、开发者工具导入与手机操作尚未验收。
 - 网络恢复真实 API 回归已通过：503、not_found、刷新后同键重试及迟到原请求不重复建单；保存期间禁止编辑与导航。10 组前端行为测试及根目录统一类型检查/全部构建通过。
 - 代码已同步至 `codex/mini-core-trial`，远端文件树与本地一致；[草稿 PR #1](https://github.com/zeshi-liu/quote-system/pull/1) 已创建，主分支尚未合并。[标准 PostgreSQL CI 验证记录](https://github.com/zeshi-liu/quote-system/actions/runs/39765104814) 对应核心代码提交 `cee84d2c04992dea064a86200b716f2facda0d92`，本次后续修改仅补齐验收文档。
+
+## 2026-10-23 后续进度
+
+第一批核心工程已按用户指令合并 PR #1，主分支 `fd67dfb45a71ca6c4ef7ad1af0d8cc3fcb53b269`；合并后标准 PostgreSQL CI 已通过。以上 2026-10-22 未合并状态为历史记录。本轮继续交付计划见 `superpowers/plans/2026-10-23-quote-delivery.md`，运行与验收边界见 `quote-delivery-trial-guide.md`。

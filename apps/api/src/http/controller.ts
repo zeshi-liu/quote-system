@@ -6,18 +6,20 @@ import { AuthService,secretHash } from '../auth/auth';
 import { CoreStore } from '../core/store';
 import { PurchaseService } from '../core/purchases';
 import { SupplierService } from '../core/suppliers';
+import { DeliveryService } from '../delivery/service';
 import { PricingService } from '../core/pricing';
 import { BusinessError,ensure } from '../core/errors';
 @Controller('/api/v1')
 export class ApiController {
- constructor(@Inject(AuthService) readonly auth:AuthService,@Inject(CoreStore) readonly store:CoreStore,@Inject(PurchaseService) readonly purchases:PurchaseService,@Inject(SupplierService) readonly suppliers:SupplierService,@Inject(PricingService) readonly pricing:PricingService){}
+ constructor(@Inject(AuthService) readonly auth:AuthService,@Inject(CoreStore) readonly store:CoreStore,@Inject(PurchaseService) readonly purchases:PurchaseService,@Inject(SupplierService) readonly suppliers:SupplierService,@Inject(PricingService) readonly pricing:PricingService,@Inject(DeliveryService) readonly delivery:DeliveryService){}
  @All('*path')
  async route(@Req() req:Request,@Res() res:Response){
   const requestId=randomUUID();res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   try{
    const path=req.path.replace(/^\/api\/v1/,'').replace(/\/$/,''),method=req.method,token=req.headers.authorization?.startsWith('Bearer ')?req.headers.authorization.slice(7):'',key=typeof req.headers['idempotency-key']==='string'?req.headers['idempotency-key']:'';
-   let result:any,match:RegExpMatchArray|null;
+   let status=200;let result:any,match:RegExpMatchArray|null;
    if(path==='/health'&&method==='GET'){await this.store.db.query('SELECT 1');result={status:'ok'};}
+   else if((match=path.match(/^\/files\/download\/([^/]+)$/))&&method==='GET'){const file=await this.delivery.download(match[1]);res.setHeader('Content-Type',file.contentType);res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(file.filename));res.status(200).send(file.data);return;}
    else if(path==='/auth/trial/password-login'&&method==='POST')result=await this.auth.trialLogin(req.body,req.ip||'unknown');
    else if(path==='/auth/miniapp/login'&&method==='POST')result=await this.auth.miniLogin(req.body,req.ip||'unknown');
    else if(path==='/auth/miniapp/bind-sales'&&method==='POST')result=await this.auth.bindSales(req.body,req.ip||'unknown');
@@ -46,11 +48,17 @@ export class ApiController {
      else if((match=path.match(/^\/sales\/purchase-order-revisions\/([^/]+)\/supplier-tasks$/))&&method==='POST')result=await this.suppliers.createTask(actor,key,match[1],req.body);
      else if((match=path.match(/^\/supplier-tasks\/([^/]+)\/(generate-link|regenerate-link|requote|cancel)$/))&&method==='POST')result=match[2]==='cancel'?await this.suppliers.cancel(actor,key,match[1],req.body):await this.suppliers.link(actor,key,match[1],match[2]==='generate-link'?'generate':match[2]==='regenerate-link'?'regenerate':'requote',req.body);
      else if((match=path.match(/^\/sales\/purchase-orders\/([^/]+)\/enter-pricing$/))&&method==='POST')result=await this.pricing.enter(actor,key,match[1],req.body);
+     else if((match=path.match(/^\/sales\/purchase-orders\/([^/]+)\/quote-versions$/))&&method==='GET')result=await this.delivery.listForOrder(actor,match[1]);
+     else if((match=path.match(/^\/quotes\/([^/]+)\/versions$/))&&method==='GET')result=await this.delivery.list(actor,match[1]);
+     else if((match=path.match(/^\/quotes\/([^/]+)\/versions\/([^/]+)\/preview$/))&&method==='GET')result=await this.delivery.preview(actor,match[1],match[2]);
+     else if((match=path.match(/^\/quotes\/([^/]+)\/versions\/([^/]+)\/(export|mark-sent|confirm|create-next|void)$/))&&method==='POST'){const [,q,v,action]=match;if(action==='export'){result=await this.delivery.export(actor,key,q,v,req.body);status=202;}else if(action==='mark-sent')result=await this.delivery.markSent(actor,key,q,v,req.body);else if(action==='confirm')result=await this.delivery.confirm(actor,key,q,v,req.body);else if(action==='create-next')result=await this.delivery.createNext(actor,key,q,v,req.body);else result=await this.delivery.void(actor,key,q,v,req.body);}
+     else if((match=path.match(/^\/(?:export-jobs|jobs)\/([^/]+)$/))&&method==='GET')result=await this.delivery.job(actor,match[1]);
+     else if((match=path.match(/^\/files\/([^/]+)\/download-url$/))&&method==='POST')result=await this.delivery.downloadUrl(actor,match[1]);
      else if((match=path.match(/^\/quotes\/([^/]+)\/versions\/([^/]+)\/(draft|adopt-latest-supplier-quotes)$/)))result=match[3]==='draft'&&['PATCH','PUT'].includes(method)?await this.pricing.save(actor,key,match[1],match[2],req.body):match[3]==='adopt-latest-supplier-quotes'&&method==='POST'?await this.pricing.adopt(actor,key,match[1],match[2],req.body):(()=>{throw new BusinessError(405,'METHOD_NOT_ALLOWED','不支持此操作');})();
      else throw new BusinessError(404,'NOT_FOUND','接口不存在');
     }
    }
-   res.status(200).json({data:result,meta:{requestId}});
+   res.status(status).json({data:result,meta:{requestId}});
   }catch(error:any){
    if(error instanceof z.ZodError)res.status(400).json({error:{code:'VALIDATION_FAILED',message:'请检查输入内容',details:error.issues.map(i=>({path:i.path.join('.'),message:i.message}))},meta:{requestId}});
    else if(error instanceof BusinessError)res.status(error.status).json({error:{code:error.code,message:error.message,...(error.details?{details:error.details}:{})},meta:{requestId}});

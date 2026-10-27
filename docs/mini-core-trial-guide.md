@@ -1,6 +1,7 @@
 # 小程序核心流程体验指南
 
-- 本批：销售手工录入与校对、采购冻结、两家厂家真实 H5 提交、表格比价、计价草稿保存。
+- 当前工程：销售手工录入与校对、采购冻结、两家厂家真实 H5 提交、表格比价、计价保存，以及报价导出、手工发送登记、实际确认和唯一应收基础。
+- 2026-10-23 新增闭环的启动、文件存储和证据见 [报价交付说明](quote-delivery-trial-guide.md)，本页保留第一批核心流程的操作记录。
 - 已授权工程开发；真实微信小程序尚未注册，AppID、微信绑定、真机预览及云端 HTTPS 验收未完成。
 - 界面原型仍留在 `prototype-v3/`；实际工程位于 `apps/mini/`、`apps/supplier-h5/`、`apps/api/`，数据由后端保存。
 
@@ -40,7 +41,7 @@ pnpm dev:mobile-web
 pnpm dev:supplier
 ```
 
-开发浏览器入口为 `http://127.0.0.1:5173`；厂家页面由系统生成 `http://127.0.0.1:5174/#token=...` 链接。API 监听 `127.0.0.1:3000`。开发运行不会自动发送消息、生成 PDF/Excel 或建立应收。
+开发浏览器入口为 `http://127.0.0.1:5173`；厂家页面由系统生成 `http://127.0.0.1:5174/#token=...` 链接。API 监听 `127.0.0.1:3000`。不会自动发送消息。本轮新增文件导出需要独立 worker 与显式文件存储配置；销售登记医院实际确认后才建立应收，详见报价交付说明。
 
 试用登录名为 `trial.sales`；随机密码保存在本机 `.local/trial-credentials.json` 的 `trialPassword`，也写入权限为 600 的 `.local/trial.env`。这些文件被 Git 忽略，禁止上传。只用本批虚构医院、采购员和厂家验证流程，不录入正式业务资料。初始化遇到已有不同密码时明确拒绝覆盖。
 
@@ -97,4 +98,4 @@ pnpm test
 
 待核实操作会按账号保存原请求和请求键；`not_found` 只表示暂未查到，不能据此换新键再建单。身份失效后先重新登录同一账号再核对，旧记录缺少原请求内容时保留待核对并联系维护人员处理。
 
-GitHub 的[标准 PostgreSQL 17.11 验证](https://github.com/zeshi-liu/quote-system/actions/runs/39765104814)已通过，含 10 组 API/金额测试（多连接锁等待、撤销后新读与并发提交）、10 组前端回归、类型检查及全部构建。核心代码提交为 `cee84d2c04992dea064a86200b716f2facda0d92`；后续仅补齐验收文档。工程在[草稿 PR #1](https://github.com/zeshi-liu/quote-system/pull/1)，未合并主分支。标准测试数据库通过不代表腾讯云部署、恢复演练或微信真机通过。
+GitHub 的[标准 PostgreSQL 17.11 验证](https://github.com/zeshi-liu/quote-system/actions/runs/39765104814)已通过，含 10 组 API/金额测试（多连接锁等待、撤销后新读与并发提交）、10 组前端回归、类型检查及全部构建。核心代码提交为 `cee84d2c04992dea064a86200b716f2facda0d92`；后续仅补齐验收文档。第一批已按用户指令合并 [PR #1](https://github.com/zeshi-liu/quote-system/pull/1)，主分支提交 `fd67dfb45a71ca6c4ef7ad1af0d8cc3fcb53b269`，[合并后 PostgreSQL CI](https://github.com/zeshi-liu/quote-system/actions/runs/39883984188)通过。本轮后续交付另在 `codex/quote-delivery`。标准测试数据库通过不代表腾讯云部署、恢复演练或微信真机通过。

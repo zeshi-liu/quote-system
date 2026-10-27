@@ -1,0 +1,26 @@
+# Worker service fragment. Mount a built release at /app and supply an approved env file.
+# Combine with the deployment's PostgreSQL/API/network services; this is not a complete deployment.
+services:
+  export-worker:
+    image: node:24-bookworm-slim
+    working_dir: /app
+    command: [node, --max-old-space-size=192, apps/api/dist/apps/api/src/delivery/worker-main.js]
+    init: true
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: '0.75'
+    pids_limit: 48
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    volumes:
+      - ${QUOTE_RELEASE_DIR:?set QUOTE_RELEASE_DIR}:/app:ro
+      - ${QUOTE_FONT_DIR:?set QUOTE_FONT_DIR}:/fonts:ro
+    env_file:
+      - ${QUOTE_ENV_FILE:?set QUOTE_ENV_FILE}
+    environment:
+      NODE_ENV: production
+      FILE_STORAGE_DRIVER: cos
+      EXPORT_FONT_PATH: /fonts/NotoSansCJK-Regular.ttc
+      EXPORT_FONT_FAMILY: NotoSansCJKsc-Regular
+    stop_grace_period: 15s
