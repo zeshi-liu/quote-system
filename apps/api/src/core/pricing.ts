@@ -24,7 +24,7 @@ export class PricingService {
  }
  private async reference(quoteId:string,draftId:string){uuid.parse(quoteId);uuid.parse(draftId);const r=(await this.store.db.query('SELECT q.purchase_order_id FROM quote_versions v JOIN quotes q ON q.id=v.quote_id WHERE q.id=$1 AND v.id=$2',[quoteId,draftId])).rows[0];if(!r)throw missing();return r.purchase_order_id as string;}
  async save(actor:Actor,key:string,quoteId:string,draftId:string,input:unknown){
-  const value=z.object({expectedVersion:version,hospitalValidUntil:date.nullable(),lines:z.array(draftLine).min(1).max(100)}).strict().parse(input),orderId=await this.reference(quoteId,draftId);
+  const value=z.object({expectedVersion:version,hospitalValidUntil:date.nullable(),lines:z.array(draftLine).min(1).max(200)}).strict().parse(input),orderId=await this.reference(quoteId,draftId);
   return this.store.mutate(actor,key,'pricing.save',{...value,quoteId,draftId},orderId,async(c,r)=>{
    const current=await draftView(c,r,this.store.clock());ensure(!(await c.query('SELECT active_export_id FROM quote_versions WHERE id=$1',[current.id])).rows[0].active_export_id,409,'EXPORT_OCCUPIED','报价正在导出，请等待完成或失败回收');ensure(current.id===draftId,409,'DRAFT_READ_ONLY','该报价不是当前可编辑草稿');this.store.checkVersion(current.version,value.expectedVersion);
    const ids=value.lines.map(l=>l.purchaseLineId);ensure(new Set(ids).size===ids.length&&ids.length===current.lines.length&&current.lines.every(l=>ids.includes(l.purchaseLineId)),400,'LINES_INCOMPLETE','计价须保留当前全部采购行');
@@ -51,7 +51,7 @@ export class PricingService {
   });
  }
  async adopt(actor:Actor,key:string,quoteId:string,draftId:string,input:unknown){
-  const value=z.object({expectedVersion:version,lineIds:z.array(uuid).min(1).max(100).optional()}).strict().parse(input),orderId=await this.reference(quoteId,draftId);
+  const value=z.object({expectedVersion:version,lineIds:z.array(uuid).min(1).max(200).optional()}).strict().parse(input),orderId=await this.reference(quoteId,draftId);
   return this.store.mutate(actor,key,'pricing.adopt',{...value,quoteId,draftId},orderId,async(c,r)=>{
    const current=await draftView(c,r,this.store.clock());ensure(!(await c.query('SELECT active_export_id FROM quote_versions WHERE id=$1',[current.id])).rows[0].active_export_id,409,'EXPORT_OCCUPIED','报价正在导出，请等待完成或失败回收');ensure(current.id===draftId,409,'DRAFT_READ_ONLY','仅当前草稿可主动采用报价');this.store.checkVersion(current.version,value.expectedVersion);
    ensure(!value.lineIds||new Set(value.lineIds).size===value.lineIds.length&&value.lineIds.every(id=>current.lines.some(l=>l.purchaseLineId===id)),400,'LINE_MISMATCH','采用范围不属于当前采购行');

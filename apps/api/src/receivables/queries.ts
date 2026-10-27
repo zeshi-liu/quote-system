@@ -1,7 +1,7 @@
 // Money mutations call this only after both the root order and receivable locks.
 // A fresh statement is essential under PostgreSQL READ COMMITTED after lock waits.
 export const effectivePaidSql="SELECT COALESCE(sum(amount),0)::numeric(12,2)::text AS paid FROM payment_records WHERE receivable_id=$1 AND status='active'";
-export const receivableRows=`SELECT ar.id,ar.purchase_order_id,ar.amount::text AS amount,ar.payment_term_days,ar.due_date,o.order_no,o.hospital_id,o.received_date,o.sales_user_id,o.row_version,o.status AS order_status,h.name AS hospital_name,h.sales_user_id AS hospital_owner,u.name AS owner_name,
+export const receivableRows=`SELECT ar.id,ar.purchase_order_id,ar.amount::text AS amount,ar.payment_term_days,o.payment_term_days AS original_term_days,EXISTS(SELECT 1 FROM receivable_exceptions e WHERE e.receivable_id=ar.id AND e.status='pending_verification') AS paused,ar.due_date,o.order_no,o.hospital_id,o.received_date,o.sales_user_id,o.row_version,o.status AS order_status,h.name AS hospital_name,h.sales_user_id AS hospital_owner,u.name AS owner_name,
  COALESCE(paid.amount,0)::numeric(12,2)::text AS paid,(ar.amount-COALESCE(paid.amount,0))::numeric(12,2)::text AS balance
  FROM receivables ar JOIN purchase_orders o ON o.id=ar.purchase_order_id JOIN hospitals h ON h.id=o.hospital_id JOIN users u ON u.id=o.sales_user_id
  LEFT JOIN LATERAL(SELECT sum(p.amount) AS amount FROM payment_records p WHERE p.receivable_id=ar.id AND p.status='active') paid ON true`;

@@ -76,7 +76,7 @@ export class SupplierService {
  private async form(c:Client,r:any){
   const submission=(await c.query("SELECT * FROM supplier_quote_submissions WHERE task_id=$1 AND status='current'",[r.task_id])).rows[0];
   const submitted=submission?{id:submission.id,validUntil:submission.valid_until,lines:(await c.query('SELECT purchase_line_id AS "purchaseLineId",status,unit_price AS "unitPrice" FROM supplier_quote_lines WHERE submission_id=$1 ORDER BY purchase_line_id',[submission.id])).rows}:null;
-  return {manufacturerName:r.manufacturer_name,revisionNo:r.revision_no,receivedDate:r.received_date,linkExpiresAt:r.link_expires.toISOString(),lines:await purchaseLines(c,r.revision_id),submitted};
+  return {manufacturerName:r.manufacturer_name,revisionNo:r.revision_no,receivedDate:r.received_date,linkExpiresAt:r.link_expires.toISOString(),lines:(await purchaseLines(c,r.revision_id)).map(({id,name,spec,quantity,unit,checked,remark})=>({id,name,spec,quantity,unit,checked,remark})),submitted};
  }
  get(token:string){return this.store.db.transaction(async c=>this.form(c,await this.capability(c,token)));}
  async submit(token:string,key:string,input:unknown){

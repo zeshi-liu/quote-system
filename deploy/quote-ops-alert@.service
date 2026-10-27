@@ -1,0 +1,12 @@
+[Unit]
+Description=Quote operational failure notification for %i
+Requires=docker.service
+After=docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/quote/release
+EnvironmentFile=/etc/quote/compose.env
+# Missing credentials explicitly return unavailable; they never claim notification success.
+EnvironmentFile=-/etc/quote/ops-alert.env
+ExecStart=/usr/bin/docker compose -f deploy/compose.yaml --profile operations run --rm --no-deps ops-alert node scripts/deployment-alert.cjs unit-failed %i
+TimeoutStartSec=20s

@@ -8,6 +8,7 @@ import { uuid } from './validation';
 export type Client=PoolClient;
 export const stable=(v:any):string=>JSON.stringify(v,(_k,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.keys(value).sort().reduce((o:any,k)=>(o[k]=value[k],o),{}):value);
 export class CoreStore {
+ resultAuthorizer?: (c:Client,actor:Actor,operation:string,result:any)=>Promise<boolean>;
  constructor(readonly db:Database,readonly clock=()=>new Date()){}
  async root(c:Client,actor:Actor,id:string,write=false) {
    await this.active(c,actor);
@@ -24,17 +25,21 @@ export class CoreStore {
  async bump(c:Client,id:string){await c.query('UPDATE purchase_orders SET row_version=row_version+1 WHERE id=$1',[id]);}
  async audit(c:Client,orderId:string,actorId:string,action:string,details:unknown){await c.query(`INSERT INTO audit_records(purchase_order_id,actor_id,action,details,created_at,actor_name_snapshot) VALUES($1,$2,$3,$4,$5,COALESCE((SELECT name FROM users WHERE id=$2),(SELECT m.name FROM supplier_links l JOIN supplier_tasks t ON t.id=l.task_id JOIN manufacturers m ON m.id=t.manufacturer_id WHERE l.id=$2)))`,[orderId,actorId,action,JSON.stringify(details),this.clock()]);}
  async active(c:Client,actor:Actor){
-   const user=(await c.query('SELECT active,role,auth_version FROM users WHERE id=$1 FOR SHARE',[actor.id])).rows[0];ensure(user?.active,401,'SESSION_EXPIRED','账号已停用');
+   const user=(await c.query('SELECT active,role,auth_version,password_setup_required FROM users WHERE id=$1 FOR SHARE',[actor.id])).rows[0];ensure(user?.active&&!user.password_setup_required,401,'SESSION_EXPIRED','账号已停用或需要先设置新密码');
    const session=(await c.query('SELECT user_id,channel,last_seen_at,revoked_at,expires_at,issued_role,auth_version FROM auth_sessions WHERE id=$1 FOR SHARE',[actor.sessionId])).rows[0],now=this.clock();ensure(session&&session.user_id===actor.id&&session.channel===actor.channel&&session.issued_role===actor.role&&session.auth_version===user.auth_version&&user.role===actor.role&&!session.revoked_at&&session.expires_at>now&&now.getTime()-session.last_seen_at.getTime()<sessionIdleMs(session.channel),401,'SESSION_EXPIRED','会话已失效');
    ensure(internalRole(user.role,session.channel),403,'ROLE_FORBIDDEN','当前角色不能使用此内部端');
  }
- async authorizeResult(c:Client,actor:Actor,result:any){
+ async authorizeResult(c:Client,actor:Actor,result:any,operation=''){
+   if(/^(admin|master)\./.test(operation))ensure(actor.role==='admin'&&actor.channel==='pc',403,'ROLE_FORBIDDEN','该操作记录仅管理员 PC 可查');
+   if(this.resultAuthorizer&&await this.resultAuthorizer(c,actor,operation,result))return;
    let orderId=result?.orderId||(result?.hospitalName?result.id:null);
    if(result?.linkId){const link=(await c.query('SELECT r.purchase_order_id FROM supplier_links l JOIN supplier_tasks t ON t.id=l.task_id JOIN purchase_order_revisions r ON r.id=t.revision_id WHERE l.id=$1',[result.linkId])).rows[0];if(!link)throw missing();orderId=link.purchase_order_id;}
    if(orderId)await this.root(c,actor,orderId);
+   else if(operation==='finance.hospital-term'){const h=(await c.query('SELECT sales_user_id FROM hospitals WHERE id=$1 FOR SHARE',[result.hospitalId])).rows[0];if(actor.role!=='salesperson'||h?.sales_user_id!==actor.id)throw missing();}
+   else if(/^(source-files|source-parsing)\./.test(operation))throw missing();
  }
  async operation(actor:Actor,key:string){
-   uuid.parse(key);return this.db.transaction(async c=>{await this.active(c,actor);const row=(await c.query("SELECT result FROM operation_requests WHERE actor_type='user' AND actor_id=$1 AND idempotency_key=$2",[actor.id,key])).rows[0];if(!row)return {status:'not_found'};await this.authorizeResult(c,actor,row.result);return {status:'committed',result:row.result};});
+   uuid.parse(key);return this.db.transaction(async c=>{await this.active(c,actor);const row=(await c.query("SELECT operation,result FROM operation_requests WHERE actor_type='user' AND actor_id=$1 AND idempotency_key=$2",[actor.id,key])).rows[0];if(!row)return {status:'not_found'};await this.authorizeResult(c,actor,row.result,row.operation);return {status:'committed',result:row.result};});
  }
  async mutate<T>(actor:Actor,key:string,operation:string,input:unknown,orderId:string|null,action:(c:Client,root:any)=>Promise<T>):Promise<T>{
    uuid.parse(key);const digest=createHash('sha256').update(stable({operation,orderId,input})).digest('hex');
@@ -43,7 +48,9 @@ export class CoreStore {
      ensure(actor.role==='salesperson',403,'ROLE_FORBIDDEN','管理员仅可只读查看业务');
      const root=orderId?await this.root(c,actor,orderId,true):null;
      const old=(await c.query("SELECT * FROM operation_requests WHERE actor_type='user' AND actor_id=$1 AND idempotency_key=$2",[actor.id,key])).rows[0];
-     if(old){ensure(old.content_hash===digest,409,'IDEMPOTENCY_KEY_REUSED','同一请求标识不能用于不同内容');await this.authorizeResult(c,actor,old.result);return old.result;}
+     if(old){ensure(old.content_hash===digest,409,'IDEMPOTENCY_KEY_REUSED','同一请求标识不能用于不同内容');await this.authorizeResult(c,actor,old.result,old.operation);return old.result;}
+     if(root?.entry_mode==='historical_backfill')ensure(['receivables.payment-add','receivables.payment-void'].includes(operation),409,'HISTORICAL_FLOW_REQUIRED','历史纸单请使用专用补录及核实入口，不能进入正常询价报价流程');
+     if(root?.submission_source==='hospital_self'&&!root.hospital_submitted_at)throw conflict('医院草稿尚未提交，销售不能提前修改或冻结');
      if(root)ensure(!['completed','voided'].includes(root.status)||operation==='delivery.confirm'||root.status==='completed'&&['receivables.payment-add','receivables.payment-void'].includes(operation),409,'ORDER_COMPLETED','订单已完成或作废，仅可查看');
      const result=await action(c,root);
      const safe:any=result&&typeof result==='object'?{...result}:result;
@@ -53,7 +60,7 @@ export class CoreStore {
    });}catch(error:any){
      if(error.code==='23505'){
        const old=(await this.db.query("SELECT * FROM operation_requests WHERE actor_type='user' AND actor_id=$1 AND idempotency_key=$2",[actor.id,key])).rows[0];
-       if(old){ensure(old.content_hash===digest,409,'IDEMPOTENCY_KEY_REUSED','请求标识冲突');return this.db.transaction(async c=>{await this.active(c,actor);await this.authorizeResult(c,actor,old.result);return old.result;});}
+       if(old){ensure(old.content_hash===digest,409,'IDEMPOTENCY_KEY_REUSED','请求标识冲突');return this.db.transaction(async c=>{await this.active(c,actor);await this.authorizeResult(c,actor,old.result,old.operation);return old.result;});}
        throw conflict('任务位、厂家或业务记录已存在，请刷新核对');
      }throw error;
    }

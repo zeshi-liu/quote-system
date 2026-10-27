@@ -7,11 +7,11 @@ export interface Session { authState: 'authenticated'; token: string; user: User
 export interface PcSession {authState:'authenticated';user:User;expiresAt:string;channel:'pc';csrf:string;}
 export interface Hospital { id: string; name: string; paymentTermDays: number; purchasers: {id: string; name: string}[] }
 export interface Manufacturer { id: string; name: string }
-export interface PurchaseInput { id?: string; name: string; spec: string; quantity: string; checked: boolean }
+export interface PurchaseInput { id?: string; name: string; spec: string; quantity: string; checked: boolean; remark?:string; sourceType?:'ocr'|'excel'|'product_library'|'custom_input';itemId?:string|null;itemVariantId?:string|null;sourceFileId?:string|null;parsingJobId?:string|null;sourceRowNumber?:number|null }
 export interface PurchaseLine extends PurchaseInput { id: string; unit: 'kg' }
 export interface SupplierTask { id: string; slotNo: number; manufacturerId: string; manufacturerName: string; status: 'pending'|'submitted'|'requote'|'cancelled'; linkId: string|null; linkExpiresAt: string|null; submissionId: string|null; validUntil: string|null }
 export interface OrderSummary { id: string; orderNo: string; hospitalName: string; receivedDate: string; paymentTermDays: number; revisionId: string; revisionNo: number; version: number; status: 'draft'|'frozen'|'quote_draft'|'quote_exported'|'quote_sent'|'completed'|'voided'; writable: boolean }
-export interface OrderView extends OrderSummary { hospitalId: string; purchaserUserId: string; lines: PurchaseLine[]; tasks: SupplierTask[]; draftId: string|null }
+export interface OrderView extends OrderSummary { receivedDateEditable?:boolean; quoteId?:string|null; hospitalId: string; purchaserUserId: string; lines: PurchaseLine[]; tasks: SupplierTask[]; draftId: string|null }
 export interface QuoteCell { taskId: string; manufacturerId: string; manufacturerName: string; state: SupplyState; price: string|null; validUntil: string|null; supplierQuoteLineId: string|null }
 export interface ComparisonLine { purchaseLineId: string; name: string; spec: string; quantity: string; cells: QuoteCell[]; kind: 'priced'|'missing'|'blocked'; lowestPrice: string|null }
 export interface Comparison { orderId: string; orderVersion: number; submittedCount: number; lines: ComparisonLine[] }
@@ -27,3 +27,13 @@ export * from './delivery';
 export * from './archive';
 
 export * from './receivables';
+
+export * from './finance-control';
+export * from './master-data';
+export * from './source-files';
+export * from './historical';
+
+export * from './hospital';
+export * from './analytics';
+
+export * from './dashboard';

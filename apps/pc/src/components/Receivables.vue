@@ -5,7 +5,7 @@ import {ReceivablesController,createReceivablesState,receivableFilterForm,filter
 import {beijingTime} from '@quote/archive-client';
 import type {PcApi} from '../api';
 const props=defineProps<{api:Pick<PcApi,'get'|'post'>;userId:string;admin:boolean;locked?:boolean}>();
-const emit=defineEmits<{(e:'busy-changed',value:boolean):void}>();
+const emit=defineEmits<{(e:'manage-finance',target:{orderId:string;receivableId:string}):void;(e:'busy-changed',value:boolean):void;(e:'dirty-changed',value:boolean):void}>();
 const state=reactive(createReceivablesState(props.admin)),filters=reactive(receivableFilterForm(state.applied));
 const recoveryError=ref(''),recovering=ref(false),notFound=ref(false),acknowledged=ref(false),storageError=ref('');
 let operations:Pick<PaymentOperations,'pending'|'mutate'|'check'|'retry'>|null=null;
@@ -16,18 +16,27 @@ const locked=computed(()=>props.locked||ownBusy.value),writeLocked=computed(()=>
 const dirty=computed(()=>filtersDirty(filters,state.applied)),pages=computed(()=>state.page?Math.max(1,Math.ceil(state.page.total/state.page.pageSize)):1);
 const ar=computed(()=>state.detail?.receivable),corrected=computed(()=>state.detail?.payments.find(p=>p.id===state.form.correctsPaymentRecordId));
 watch(ownBusy,v=>emit('busy-changed',v),{flush:'sync',immediate:true});watch(()=>state.review,()=>{acknowledged.value=false;});
+const entryDirty=computed(()=>hasEntry()||!!state.review);
+watch(entryDirty,value=>emit('dirty-changed',value),{flush:'sync',immediate:true});
+function canLeave(){return !ownBusy.value&&!entryDirty.value&&!operations?.pending;}
+function abandon(){if(writeLocked.value)return;controller.cancelCorrection();}
+function retainEntry(){if(!entryDirty.value)return false;state.writeError='有未提交回款，请先完成登记或选择放弃并清空未提交回款。';return true;}
+function paused(value:unknown){return (value as {paused?:boolean})?.paused===true;}
+function hasEntry(){return !!(state.form.amount||state.form.paidDate||state.form.remark||state.form.correctsPaymentRecordId||state.voidPaymentId);}
+function manageFinance(){if(locked.value||!!operations?.pending||!ar.value||state.review)return;if(hasEntry()){state.writeError='已有未提交回款内容，请先完成登记或清空后再查看账期与异常。';return;}emit('manage-finance',{orderId:ar.value.orderId,receivableId:ar.value.id});}
 function originalReference(id:string){return paymentReference(state.detail?.payments.find(p=>p.id===id));}
 function guard(work:()=>void){try{state.writeError='';work();}catch(e){state.writeError=(e as Error).message;}}
 async function query(){if(locked.value)return;await controller.query({...filters} as ReceivableFilters);}
 async function reset(){if(locked.value)return;Object.assign(filters,receivableFilterForm(createReceivablesState(props.admin).applied));await query();}
-async function back(){if(locked.value)return;restoreFilters(filters,state.applied);await controller.back();}
+async function back(){if(locked.value||retainEntry())return;restoreFilters(filters,state.applied);await controller.back();}
 async function move(n:number){if(locked.value)return;restoreFilters(filters,state.applied);await controller.move(n);}
 async function open(id:string){if(locked.value)return;await controller.open(id);}
-async function refresh(){if(locked.value)return;if(state.mode==='detail')await controller.open(state.selectedId);else{restoreFilters(filters,state.applied);await controller.back();}}
+async function refresh(){if(locked.value||retainEntry())return;if(state.mode==='detail')await controller.open(state.selectedId);else{restoreFilters(filters,state.applied);await controller.back();}}
 async function commit(){if(writeLocked.value||!acknowledged.value)return;try{await controller.commit();}catch{/* visible controller error and original pending retained */}}
 async function recover(retry=false){if(locked.value||!operations?.pending)return;const original=operations.pending,target=receivableOperationTarget(original);recovering.value=true;recoveryError.value='';try{const status=retry?(await operations.retry(),'committed'):await operations.check();notFound.value=status==='not_found';if(status==='committed'&&target){await controller.open(target);state.notice=state.detail?'原回款操作已确认提交，余额已重新读取。':'原操作已确认提交；最新余额读取失败，请重新加载。';}}catch(e){recoveryError.value=(e as Error).message;}finally{recovering.value=false;}}
+defineExpose({refresh,canLeave});
 onMounted(()=>Promise.all([controller.hospitals(),controller.query(state.applied)]));
-onBeforeUnmount(()=>{controller.dispose();emit('busy-changed',false);});
+onBeforeUnmount(()=>{controller.dispose();emit('busy-changed',false);emit('dirty-changed',false);});
 </script>
 <template>
  <div class="receivables">
@@ -48,7 +57,7 @@ onBeforeUnmount(()=>{controller.dispose();emit('busy-changed',false);});
    <p v-if="state.hospitalsError" class="error" role="alert">医院筛选读取失败：{{state.hospitalsError}} <button :disabled="locked" @click="controller.hospitals()">重试</button></p>
    <p v-if="state.listError" class="error" role="alert">查询失败：{{state.listError}} <button :disabled="locked" @click="back">重新查询</button></p><p v-if="state.listLoading" class="loading" role="status">正在读取回款台账…</p>
    <template v-if="state.page&&!state.listLoading"><div class="result-head"><strong>共 {{state.page.total}} 单应收</strong><span>金额单位：元 · 到期日、单号顺序 · {{beijingTime(state.page.asOf)}}</span></div>
-    <div class="table-scroll"><table class="ledger-table"><thead><tr><th>医院 / 订单</th><th>应收</th><th>有效已收</th><th>未收余额</th><th>到期日 / 状态</th><th>负责人</th><th>操作</th></tr></thead><tbody><tr v-for="item in state.page.items" :key="item.id"><td><strong>{{item.hospitalName}}</strong><small>{{item.orderNo}} · 接收 {{item.receivedDate}}</small></td><td>{{item.amount}}</td><td>{{item.paid}}</td><td class="balance">{{item.balance}}</td><td>{{item.dueDate}}<small>{{accountState(item)}}{{accountState(item)===paymentStateLabel(item)?'':' · '+paymentStateLabel(item)}}</small></td><td>{{item.owner.name}}<small>{{item.writable?'订单负责销售':'只读查阅'}}</small></td><td><button class="text-button" :disabled="locked" @click="open(item.id)">{{item.writable?'查看 / 登记 →':'查看 →'}}</button></td></tr><tr v-if="!state.page.items.length"><td class="empty" colspan="7">没有符合当前筛选的应收。</td></tr></tbody></table></div>
+    <div class="table-scroll"><table class="ledger-table"><thead><tr><th>医院 / 订单</th><th>应收</th><th>有效已收</th><th>未收余额</th><th>到期日 / 状态</th><th>负责人</th><th>操作</th></tr></thead><tbody><tr v-for="item in state.page.items" :key="item.id"><td><strong>{{item.hospitalName}}</strong><small>{{item.orderNo}} · 接收 {{item.receivedDate}}</small></td><td>{{item.amount}}</td><td>{{item.paid}}</td><td class="balance">{{item.balance}}</td><td>{{item.dueDate}}<small v-if="paused(item)">异常暂停催收</small><small>{{accountState(item)}}{{accountState(item)===paymentStateLabel(item)?'':' · '+paymentStateLabel(item)}}</small></td><td>{{item.owner.name}}<small>{{item.writable?'订单负责销售':'只读查阅'}}</small></td><td><button class="text-button" :disabled="locked" @click="open(item.id)">{{item.writable?'查看 / 登记 →':'查看 →'}}</button></td></tr><tr v-if="!state.page.items.length"><td class="empty" colspan="7">没有符合当前筛选的应收。</td></tr></tbody></table></div>
     <div class="pagination"><label>每页<select v-model.number="filters.pageSize" :disabled="locked" @change="query"><option :value="20">20 条</option><option :value="50">50 条</option></select></label><span>第 {{state.page.page}} / {{pages}} 页</span><button :disabled="locked||state.page.page<=1" @click="move(state.page!.page-1)">上一页</button><button :disabled="locked||state.page.page>=pages" @click="move(state.page!.page+1)">下一页</button></div>
    </template><p class="footnote">全缺货不产生应收；尚未医院确认及未核实的历史补录不进入台账。</p>
   </template>
@@ -58,7 +67,7 @@ onBeforeUnmount(()=>{controller.dispose();emit('busy-changed',false);});
    <p v-if="state.notice" class="filter-note" role="status">{{state.notice}}</p><p v-if="state.writeError" class="error" role="alert">{{state.writeError}}</p>
    <template v-if="ar&&state.detail"><div class="heading detail-heading"><div><p class="eyebrow">{{ar.orderNo}}</p><h1>{{ar.hospitalName}}</h1><p class="muted">实际接收 {{ar.receivedDate}} · 订单负责人 {{ar.owner.name}}</p></div><span class="scope">{{accountState(ar)}}{{ar.writable?'':' · 只读'}}</span></div>
     <div class="facts ledger-facts"><div><span>应收金额 / 元</span><strong>{{ar.amount}}</strong></div><div><span>有效已收 / 元</span><strong>{{ar.paid}}</strong></div><div><span>未收余额 / 元</span><strong>{{ar.balance}}</strong></div><div><span>到期日 · 账期 {{ar.paymentTermDays}} 天</span><strong>{{ar.dueDate}}</strong></div></div>
-    <p v-if="!ar.writable" class="filter-note">本单只读，回款登记及误录作废由订单负责销售员处理。</p>
+    <div class="action-row"><button :disabled="locked||!!operations?.pending||!!state.review" @click="manageFinance">查看账期 / 异常 →</button><button v-if="hasEntry()" :disabled="writeLocked||!!state.review" @click="abandon">放弃并清空未提交回款</button></div><p v-if="paused(ar)" class="filter-note">异常暂停催收；应收、有效已收、未收余额和到期日保持原计算，不表示结清或退款完成。</p><p v-if="!ar.writable" class="filter-note">本单只读，回款登记及误录作废由订单负责销售员处理。</p>
     <div class="account-layout"><section class="records"><div class="section-heading"><h2>回款记录</h2><span class="muted">有效与已作废记录均保留</span></div><p v-if="!state.detail.payments.length" class="muted">暂无回款登记记录。</p>
      <article v-for="p in state.detail.payments" :key="p.id" class="payment-record"><div class="section-heading"><strong>{{p.amount}} 元 <small>{{paymentType(p)}}</small></strong><span>{{p.status==='active'?'有效':'已作废'}}</span></div><dl class="panel-facts"><div><dt>实际回款日期</dt><dd>{{paymentDate(p)}}</dd></div><div><dt>备注</dt><dd>{{p.remark||'—'}}</dd></div><div><dt>原记录人</dt><dd>{{p.recordedByName}}</dd></div><div><dt>原记录时间</dt><dd>{{beijingTime(p.recordedAt)}}</dd></div><template v-if="p.status==='void'"><div><dt>作废原因</dt><dd>{{p.voidReason}}</dd></div><div><dt>作废人 / 时间</dt><dd>{{p.voidedByName}} · {{beijingTime(p.voidedAt)}}</dd></div></template></dl><p v-if="p.correctsPaymentRecordId" class="muted">关联更正原记录：{{originalReference(p.correctsPaymentRecordId)}}</p><div v-if="ar.writable" class="action-row"><button v-if="p.status==='active'" :disabled="writeLocked" @click="state.voidPaymentId=p.id;state.voidReason='';controller.invalidateReview()">作废误录</button><button v-else :disabled="writeLocked||ar.paymentState==='settled'" @click="guard(()=>controller.correct(p.id))">关联原记录重新登记</button></div></article>
     </section>

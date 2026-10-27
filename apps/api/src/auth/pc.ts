@@ -19,7 +19,7 @@ export class PcAuthService{
  private origin(req:Request){const origin=req.headers.origin;ensure(typeof origin==='string'&&this.auth.config.allowedOrigins.includes(origin)&&(!this.auth.config.production||origin.startsWith('https://')),403,'ORIGIN_FORBIDDEN','请求来源不在允许范围内');}
  private csrfHash(req:Request){const value=req.headers['x-csrf-token'];ensure(typeof value==='string'&&value.length>=20&&value.length<=256,403,'CSRF_INVALID','请重新取得页面安全令牌');return secretHash(value);}
  private checkHash(stored:unknown,actual:string){ensure(typeof stored==='string'&&/^[a-f0-9]{64}$/.test(stored)&&timingSafeEqual(Buffer.from(stored,'hex'),Buffer.from(actual,'hex')),403,'CSRF_INVALID','页面安全令牌已变化，请重新取得');}
- async authenticate(req:Request){const value=this.credentials(req);return value.pcToken!==undefined?this.auth.authenticate(value.pcToken,'pc'):this.auth.authenticate(value.bearer);}
+ async authenticate(req:Request,allowHospital=false){const value=this.credentials(req);return value.pcToken!==undefined?this.auth.authenticate(value.pcToken,'pc'):this.auth.authenticate(value.bearer,'bearer',allowHospital);}
  async csrf(req:Request,res:Response){
   ensure(!req.headers.authorization,401,'CHANNEL_FORBIDDEN','PC安全令牌仅使用Cookie通道');const value=this.credentials(req),csrf=newSecret(),now=this.auth.clock(),names=this.settings(req);
   if(value.pcToken!==undefined){const actor=await this.auth.authenticate(value.pcToken,'pc'),row=(await this.auth.db.query('UPDATE auth_sessions SET csrf_hash=$2 WHERE id=$1 AND revoked_at IS NULL RETURNING expires_at',[actor.sessionId,secretHash(csrf)])).rows[0];ensure(row,401,'SESSION_EXPIRED','会话已失效');return {csrf,expiresAt:row.expires_at.toISOString()};}

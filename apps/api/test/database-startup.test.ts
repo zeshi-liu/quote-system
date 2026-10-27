@@ -1,0 +1,5 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {Database} from '../src/db/database';
+const url='postgresql://unused:unused@127.0.0.1:1/unused';
+test('连接池兑现部署配置，离线单连接及显式原生竞争连接数优先',async()=>{const saved={pool:process.env.DB_POOL_MAX,offline:process.env.DEV_PGLITE,mode:process.env.NODE_ENV};try{delete process.env.DEV_PGLITE;process.env.DB_POOL_MAX='5';let db=new Database(url);assert.equal(db.pool.options.max,5);await db.close();db=new Database(url,8);assert.equal(db.pool.options.max,8);await db.close();process.env.DEV_PGLITE='true';db=new Database(url);assert.equal(db.pool.options.max,1);await db.close();delete process.env.DEV_PGLITE;for(const v of ['0','-1','abc','1e2','51']){process.env.DB_POOL_MAX=v;assert.throws(()=>new Database(url),/DB_POOL_MAX/);}delete process.env.DB_POOL_MAX;process.env.NODE_ENV='production';db=new Database(url);assert.equal(db.pool.options.max,5);await db.close();}finally{for(const [key,value] of [['DB_POOL_MAX',saved.pool],['DEV_PGLITE',saved.offline],['NODE_ENV',saved.mode]])if(value===undefined)delete process.env[key!];else process.env[key!]=value;}});

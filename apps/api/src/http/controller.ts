@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { AuthService,secretHash } from '../auth/auth';
 import { PcAuthService } from '../auth/pc';
+import { FeatureService } from '../features';
 import { CoreStore } from '../core/store';
 import { PurchaseService } from '../core/purchases';
 import { SupplierService } from '../core/suppliers';
@@ -14,7 +15,7 @@ import { ArchiveService } from '../archive/service';
 import { BusinessError,ensure } from '../core/errors';
 @Controller('/api/v1')
 export class ApiController {
- constructor(@Inject(AuthService) readonly auth:AuthService,@Inject(CoreStore) readonly store:CoreStore,@Inject(PurchaseService) readonly purchases:PurchaseService,@Inject(SupplierService) readonly suppliers:SupplierService,@Inject(PricingService) readonly pricing:PricingService,@Inject(DeliveryService) readonly delivery:DeliveryService,@Inject(ArchiveService) readonly archive:ArchiveService,@Inject(PcAuthService) readonly pc:PcAuthService,@Inject(ReceivableService) readonly receivables:ReceivableService){}
+ constructor(@Inject(FeatureService) readonly features:FeatureService,@Inject(AuthService) readonly auth:AuthService,@Inject(CoreStore) readonly store:CoreStore,@Inject(PurchaseService) readonly purchases:PurchaseService,@Inject(SupplierService) readonly suppliers:SupplierService,@Inject(PricingService) readonly pricing:PricingService,@Inject(DeliveryService) readonly delivery:DeliveryService,@Inject(ArchiveService) readonly archive:ArchiveService,@Inject(PcAuthService) readonly pc:PcAuthService,@Inject(ReceivableService) readonly receivables:ReceivableService){}
  @All('*path')
  async route(@Req() req:Request,@Res() res:Response){
   const requestId=randomUUID();res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
@@ -30,9 +31,12 @@ export class ApiController {
    if(path==='/health'&&method==='GET'){await this.store.db.query('SELECT 1');result={status:'ok'};}
    else if((match=path.match(/^\/files\/download\/([^/]+)$/))&&method==='GET'){const file=await this.delivery.download(match[1]);res.setHeader('Content-Type',file.contentType);res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(file.filename));res.status(200).send(file.data);return;}
    else if(path==='/auth/trial/password-login'&&method==='POST')result=await this.auth.trialLogin(req.body,req.ip||'unknown');
+   else if(path==='/auth/password/temporary-login'&&method==='POST')result=await this.features.identity.verifyTemporaryPassword(req.body,req.ip||'unknown');
+   else if(path==='/auth/password/complete-setup'&&method==='POST')result=await this.features.identity.completeSetup(req.body);
    else if(path==='/auth/csrf'&&method==='GET')result=await this.pc.csrf(req,res);
    else if(path==='/auth/pc/password-login'&&method==='POST')result=await this.pc.login(req,res);
    else if(path==='/auth/miniapp/login'&&method==='POST')result=await this.auth.miniLogin(req.body,req.ip||'unknown');
+   else if(path==='/auth/miniapp/hospital-phone-login'&&method==='POST')result=await this.features.hospitalAuth.phoneLogin(req.body,req.ip||'unknown');
    else if(path==='/auth/miniapp/bind-sales'&&method==='POST')result=await this.auth.bindSales(req.body,req.ip||'unknown');
    else if(['/supplier/session','/h5/sessions'].includes(path)&&method==='POST')result=await this.suppliers.exchange(req.body);
    else if(['/supplier/quote','/h5/supplier-quote','/h5/supplier-quote/submit'].includes(path)){
@@ -43,11 +47,14 @@ export class ApiController {
     if((match=path.match(/^\/operations\/([^/]+)$/))&&method==='GET'){
      const isSupplier=supplierOperation;
      if(isSupplier)result=await this.suppliers.operation(token,match[1]);else{
-      const actor=await this.pc.authenticate(req);result=await this.store.operation(actor,match[1]);
+      const actor=await this.pc.authenticate(req,true);result=actor.role==='hospital'?await this.features.hospital.operation(actor,match[1]):await this.store.operation(actor,match[1]);
      }
     }else{
-     const actor=await this.pc.authenticate(req);
-     if(path==='/auth/me'&&method==='GET')result={id:actor.id,name:actor.name,role:actor.role,channel:actor.channel};
+     const actor=await this.pc.authenticate(req,this.features.hospitalPurpose(path));
+     const feature=await this.features.route(actor,key,path,method,req.body,req.query as Record<string,unknown>);
+     if(feature?.binary){res.setHeader('Content-Type',feature.binary.mimeType);res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(feature.binary.fileName));res.status(200).send(feature.binary.bytes);return;}
+     if(feature){result=feature.data;status=feature.status||200;}
+     else if(path==='/auth/me'&&method==='GET')result={id:actor.id,name:actor.name,role:actor.role,channel:actor.channel};
      else if(path==='/auth/logout'&&method==='POST'){result=await this.auth.logout(actor);if(actor.channel==='pc')this.pc.clear(req,res);}
      else if(path==='/sales/receivables'&&method==='GET')result=await this.receivables.list(actor,req.query);
      else if((match=path.match(/^\/sales\/receivables\/([^/]+)$/))&&method==='GET')result=await this.receivables.detail(actor,match[1]);
@@ -69,6 +76,7 @@ export class ApiController {
      else if((match=path.match(/^\/sales\/purchase-orders\/([^/]+)\/enter-pricing$/))&&method==='POST')result=await this.pricing.enter(actor,key,match[1],req.body);
      else if((match=path.match(/^\/sales\/purchase-orders\/([^/]+)\/quote-versions$/))&&method==='GET')result=await this.delivery.listForOrder(actor,match[1]);
      else if((match=path.match(/^\/quotes\/([^/]+)\/versions$/))&&method==='GET')result=await this.delivery.list(actor,match[1]);
+     else if((match=path.match(/^\/quotes\/([^/]+)\/versions\/([^/]+)\/logo$/))&&method==='GET'){const image=await this.delivery.logo(actor,match[1],match[2]);res.setHeader('Content-Type',image.mimeType);res.status(200).send(image.bytes);return;}
      else if((match=path.match(/^\/quotes\/([^/]+)\/versions\/([^/]+)\/preview$/))&&method==='GET')result=await this.delivery.preview(actor,match[1],match[2]);
      else if((match=path.match(/^\/quotes\/([^/]+)\/versions\/([^/]+)\/(export|mark-sent|confirm|create-next|void)$/))&&method==='POST'){const [,q,v,action]=match;if(action==='export'){result=await this.delivery.export(actor,key,q,v,req.body);status=202;}else if(action==='mark-sent')result=await this.delivery.markSent(actor,key,q,v,req.body);else if(action==='confirm')result=await this.delivery.confirm(actor,key,q,v,req.body);else if(action==='create-next')result=await this.delivery.createNext(actor,key,q,v,req.body);else result=await this.delivery.void(actor,key,q,v,req.body);}
      else if((match=path.match(/^\/(?:export-jobs|jobs)\/([^/]+)$/))&&method==='GET')result=await this.delivery.job(actor,match[1]);

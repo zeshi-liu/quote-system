@@ -1,0 +1,170 @@
+name: quote-system
+x-app: &app
+  image: ${QUOTE_API_IMAGE:-quote-api:local}
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+    target: runtime
+  init: true
+  restart: unless-stopped
+  env_file: ${QUOTE_ENV_FILE:?set QUOTE_ENV_FILE to protected runtime env}
+  environment: &app-environment
+    NODE_ENV: production
+    API_HOST: 0.0.0.0
+    TRIAL_PASSWORD_LOGIN: 'false'
+    REMINDER_SEND_WECHAT: ${REMINDER_SEND_WECHAT:-false}
+    DB_POOL_MAX: '5'
+  read_only: true
+  tmpfs: ['/tmp:size=128m,mode=1777']
+  volumes: ['${QUOTE_FONT_DIR:?set QUOTE_FONT_DIR}:/fonts:ro']
+  pids_limit: 48
+  stop_grace_period: 20s
+  logging: &logs
+    driver: json-file
+    options: {max-size: 10m, max-file: '3'}
+  depends_on:
+    postgres: {condition: service_healthy}
+services:
+  postgres:
+    image: postgres:17.11-bookworm
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: '0.65'
+    shm_size: 128m
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password, migrator_password, app_password]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    command: [postgres, -c, max_connections=40, -c, shared_buffers=128MB, -c, work_mem=4MB]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d quote_system]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *logs
+  api:
+    <<: *app
+    environment:
+      <<: *app-environment
+      TRUSTED_PROXY_IPS: ${QUOTE_PROXY_WEB_IP:-172.30.90.2}
+    networks:
+      default:
+      trusted-proxy:
+        ipv4_address: ${QUOTE_PROXY_API_IP:-172.30.90.3}
+    command: [sh, -c, 'node scripts/deployment-preflight.cjs && exec node --max-old-space-size=256 apps/api/dist/apps/api/src/main.js']
+    mem_limit: 512m
+    cpus: '0.60'
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:3000/api/v1/health").then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))']
+      interval: 15s
+      timeout: 5s
+      retries: 8
+  heavy-worker:
+    <<: *app
+    environment:
+      <<: *app-environment
+      HEAVY_DISK_PATHS: /tmp,/monitor/postgres,/monitor/backup
+    volumes:
+      - ${QUOTE_FONT_DIR:?set QUOTE_FONT_DIR}:/fonts:ro
+      - postgres-data:/monitor/postgres:ro
+      - backup-work:/monitor/backup:ro
+    command: [node, --max-old-space-size=192, deploy/launcher.cjs, heavy]
+    mem_limit: 1g
+    cpus: '0.75'
+  reminder-worker:
+    <<: *app
+    command: [sh, -c, 'node scripts/deployment-preflight.cjs && exec node --max-old-space-size=128 apps/api/dist/apps/api/src/finance-control/worker-main.js']
+    mem_limit: 192m
+    cpus: '0.15'
+  maintenance:
+    <<: *app
+    command: [node, --max-old-space-size=96, deploy/launcher.cjs, maintenance]
+    mem_limit: 128m
+    cpus: '0.10'
+  web:
+    image: ${QUOTE_WEB_IMAGE:-quote-web:local}
+    build: {context: .., dockerfile: deploy/Dockerfile, target: web}
+    restart: unless-stopped
+    mem_limit: 96m
+    cpus: '0.10'
+    ports: ['80:80', '443:443']
+    networks:
+      ingress:
+      trusted-proxy:
+        ipv4_address: ${QUOTE_PROXY_WEB_IP:-172.30.90.2}
+    environment:
+      QUOTE_DOMAIN: ${QUOTE_DOMAIN:?set actual HTTPS domain}
+      NGINX_ENVSUBST_FILTER: ^QUOTE_DOMAIN$
+    volumes: ['${QUOTE_CERT_DIR:?set QUOTE_CERT_DIR}:/certs:ro']
+    depends_on:
+      api: {condition: service_healthy}
+    logging: *logs
+  migrate:
+    image: ${QUOTE_API_IMAGE:-quote-api:local}
+    profiles: [operations]
+    env_file: ${QUOTE_MIGRATION_ENV_FILE:-/etc/quote/migration.env}
+    command: [node, deploy/launcher.cjs, migrate]
+    restart: 'no'
+    mem_limit: 256m
+    depends_on:
+      postgres: {condition: service_healthy}
+  init-admin:
+    <<: *app
+    profiles: [operations]
+    restart: 'no'
+    command: [node, deploy/launcher.cjs, init-admin]
+    mem_limit: 256m
+    stdin_open: true
+    tty: true
+  ops-alert:
+    image: ${QUOTE_API_IMAGE:-quote-api:local}
+    profiles: [operations]
+    command: [node, scripts/deployment-alert.cjs, unit-failed, quote-backup.service]
+    environment:
+      OPS_ALERT_DRIVER: ${OPS_ALERT_DRIVER:-disabled}
+      OPS_ALERT_WEBHOOK_URL: ${OPS_ALERT_WEBHOOK_URL:-}
+      OPS_ALERT_BEARER_TOKEN: ${OPS_ALERT_BEARER_TOKEN:-}
+      OPS_ALERT_TIMEOUT_MS: ${OPS_ALERT_TIMEOUT_MS:-5000}
+    read_only: true
+    init: true
+    restart: 'no'
+    mem_limit: 96m
+    cpus: '0.10'
+    pids_limit: 24
+    logging: *logs
+  backup:
+    image: ${QUOTE_BACKUP_IMAGE:-quote-backup:local}
+    build:
+      context: ..
+      dockerfile: deploy/backup.Dockerfile
+      additional_contexts:
+        runtime: service:api
+    profiles: [operations]
+    env_file: ${QUOTE_BACKUP_ENV_FILE:-/etc/quote/backup.env}
+    command: [scripts/deployment-backup.cjs]
+    restart: 'no'
+    mem_limit: 256m
+    cpus: '0.25'
+    volumes:
+      - backup-work:/backup-work
+      - ${QUOTE_BACKUP_RECIPIENTS_FILE:-/etc/quote/backup-recipients.txt}:/run/backup-recipients.txt:ro
+      - ${QUOTE_RESTORE_INPUT_DIR:-/etc/quote/restore-input}:/restore-input:ro
+    logging: *logs
+networks:
+  ingress:
+  trusted-proxy:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${QUOTE_PROXY_SUBNET:-172.30.90.0/29}
+volumes:
+  postgres-data:
+  backup-work:
+secrets:
+  postgres_password: {file: '${QUOTE_POSTGRES_PASSWORD_FILE:?set protected file}'}
+  migrator_password: {file: '${QUOTE_MIGRATOR_PASSWORD_FILE:?set protected file}'}
+  app_password: {file: '${QUOTE_APP_PASSWORD_FILE:?set protected file}'}

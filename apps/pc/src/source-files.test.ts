@@ -1,0 +1,10 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {fetchPrivateSource} from './source-files';
+test('source originals forward same-origin current cookie and prohibit foreign grants',async()=>{let init:RequestInit|undefined,calls=0;const fetcher=(async(_url:unknown,options?:RequestInit)=>{calls++;init=options;return new Response('private');}) as typeof fetch;await fetchPrivateSource('/api/v1/files/a/content?token=x',fetcher,'https://internal.example');assert.equal(init?.credentials,'same-origin');assert.equal(init?.cache,'no-store');await assert.rejects(fetchPrivateSource('https://other.example/api/v1/files/a/content?token=x',fetcher,'https://internal.example'));assert.equal(calls,1);});
+test('private source revoked session remains a visible authorization failure',async()=>{await assert.rejects(fetchPrivateSource('/api/v1/files/a/content?token=x',(async()=>new Response(JSON.stringify({error:{code:'SESSION_EXPIRED',message:'请重新登录'}}),{status:401})) as typeof fetch,'https://internal.example'),(e:any)=>e.status===401&&e.code==='SESSION_EXPIRED');});
+test('private source timeout remains active while response body is delayed',async t=>{
+ const realTimeout=globalThis.setTimeout;let body:ReadableStreamDefaultController<Uint8Array>|undefined,signal:AbortSignal|undefined;
+ t.mock.method(globalThis,'setTimeout',((fn:any,delay:number,...args:any[])=>realTimeout(fn,delay===20000?20:delay,...args)) as typeof setTimeout);
+ const transport=(async(_url:unknown,init:RequestInit)=>{signal=init.signal!;return new Response(new ReadableStream<Uint8Array>({start(controller){body=controller;signal!.addEventListener('abort',()=>controller.error(new DOMException('body download aborted','AbortError')),{once:true});}}));}) as typeof fetch;
+ const reading=fetchPrivateSource('/api/v1/files/a/content?token=x',transport,'https://internal.example');const outcome=await Promise.race([reading.then(()=> 'resolved',e=>e.name),new Promise<string>(resolve=>realTimeout(()=>resolve('body-still-pending'),80))]);
+ body?.error(new DOMException('test cleanup','AbortError'));assert.equal(outcome,'AbortError');assert.equal(signal?.aborted,true);
+});

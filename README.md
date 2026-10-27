@@ -1,19 +1,25 @@
 # 中药饮片报价系统
 
-面向中药饮片销售员的报价协作系统。需求基线为 PRD v3，前五部分开发设计已确认。2026-10-22 用户决定进入真实小程序核心流程体验版开发，通过手机试用判断操作手感；本批不代表完整 MVP 或生产上线。
+面向中药饮片销售员的报价协作系统。需求基线为 PRD v3，前五部分开发设计已确认。2026-10-26 已按持续开发授权接入 PC、销售小程序、医院轻量端和厂家 H5 的业务工程。代码实现、离线测试、标准 PostgreSQL CI、真实微信和云端验收分别记录，不把工程构建等同生产上线。
 
 ## 核心流程体验工程
 
-- `apps/mini/`：uni-app/Vue 3/TypeScript 销售小程序，另可构建同源 H5 用于开发联调。
+- `apps/mini/`：uni-app/Vue 3/TypeScript 销售小程序与医院轻量端；H5 仅用于开发联调，不能替代微信真机验收。
 - `apps/supplier-h5/`：厂家的独立 Vue 3 报价表单。
-- `apps/pc/`：内部账号密码登录的 PC 历史档案与回款台账；订单负责销售可登记、更正回款，管理员只读。
-- `apps/api/`：NestJS、PostgreSQL 迁移、权限、厂家链接、完整报价与计价保存、报价导出任务、发送确认、唯一应收和留痕回款账本。
+- `apps/pc/`：销售待办、采购校对、询价计价、交付、历史、回款及五类分析；管理员在 PC 维护基础资料和专项交接，全量业务只读。
+- `apps/api/`：NestJS/PostgreSQL：身份权限、采购修订、询价计价、持久导出、发送确认、订单应收、历史核实、账期异常、提醒、分析快照及私有原单解析。
 - `packages/contracts/`：各端共用接口类型。
 - `packages/archive-client/`：PC 与小程序共用的档案查询、展示和请求状态处理。
 - `packages/receivables-client/`：两端共用的回款校验、复核、查询状态与原操作恢复逻辑。
 - [实施计划](docs/implementation-mini-core-v1.md)及[试用与真机准备指南](docs/mini-core-trial-guide.md)。
 
-当前工程已接入“手工采购校对 → 冻结 → 两家厂家 H5 报价 → 表格比价 → 计价保存 → PDF/Excel 导出 → 线下发送登记 → 医院实际确认 → 唯一应收 → 分次回款与误录作废重录”，并提供 PC/小程序历史档案和同院最近三单价格参考。私有 COS 真实接入尚待验证；账期调整、催收异常及提醒、历史补录、分析、OCR、PC 其他报价编辑和管理员基础资料维护仍按后续批次实施。验证边界见[报价交付](docs/quote-delivery-trial-guide.md)、[历史档案](docs/order-archive-trial-guide.md)及[回款台账说明](docs/receivables-trial-guide.md)。用户尚未注册小程序，真实 AppID 绑定与真机预览未完成。本机原生 PostgreSQL 启动异常，离线联调使用开发用 PGlite；标准 PostgreSQL CI 与本地验证分别记录，不能互相替代。
+当前工程覆盖“采购录入/解析与人工校对 → 冻结 → 两家厂家 H5 报价 → 表格比价与最终价确认 → PDF/Excel 导出 → 线下发送登记 → 医院实际确认 → 唯一应收 → 分次回款与留痕更正”。另提供历史纸单核实、账期及异常、每日提醒适配、五类图表与快照下钻、管理员基础资料/来源批次和离职专项交接。所有关键金额和权限由服务端校验。
+
+逐项实现与验证状态见 [PRD v3 工程覆盖与验收边界](docs/mvp-coverage-2026-10-26.md)，部署及恢复步骤见 [部署手册](docs/deployment-runbook-v1.md)。真实 AppID、微信手机号与订阅授权、COS/OCR、HTTPS 云端、Docker/systemd 运行与恢复演练仍须配置和验收。当前未采购或部署云资源。2026-10-26 历史基线已通过 GitHub 标准 PostgreSQL 检查；2026-10-27 修复代码也已通过[标准 PostgreSQL、370 项界面及全部构建检查](https://github.com/zeshi-liu/quote-system/actions/runs/40431804029)，最新文档提交仍须按 PR Checks 核对，草稿 PR 保持待合并。
+
+2026-10-27 已在虚构隔离数据中完成报价到回款的实际页面主流程，并修复北京时间、PC 刷新和医院确认复核；金额及文件核对边界见 [浏览器验收记录](docs/browser-acceptance-2026-10-27.md)。UI 370/370 通过，真实微信注册及云端验收仍待外部条件。
+
+本机原生 PostgreSQL 启动异常，离线联调使用 PGlite；它不证明标准 PostgreSQL 多连接竞争、备份恢复或生产可用性。旧阶段证据保留在 [报价交付](docs/quote-delivery-trial-guide.md)、[历史档案](docs/order-archive-trial-guide.md)及[回款台账](docs/receivables-trial-guide.md)说明中；当前范围以覆盖表为准。
 
 ## 主要文档
 

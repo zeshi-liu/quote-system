@@ -4,7 +4,7 @@ import type {ReceivableFilters} from '@quote/contracts';
 import {ReceivablesController,createReceivablesState,receivableFilterForm,filtersDirty,restoreFilters,accountState,paymentStateLabel,paymentDate,paymentType,paymentReference,beijingToday} from '@quote/receivables-client';
 import {beijingTime} from '@quote/archive-client';
 import {request,mutate,pending} from '../api';
-const props=defineProps<{locked:boolean}>();const emit=defineEmits<{(e:'busy-changed',value:boolean):void;(e:'failure',value:unknown):void}>();
+const props=defineProps<{locked:boolean}>();const emit=defineEmits<{(e:'manage-finance',target:{orderId:string;receivableId:string}):void;(e:'busy-changed',value:boolean):void;(e:'dirty-changed',value:boolean):void;(e:'failure',value:unknown):void}>();
 const state=reactive(createReceivablesState()),filters=reactive(receivableFilterForm(state.applied)),ack=ref(false);
 const controller=new ReceivablesController(request,(label,path,body)=>mutate(label,path,'POST',body),state,e=>emit('failure',e));
 const ownBusy=computed(()=>state.listLoading||state.detailLoading||state.hospitalsLoading||state.working),locked=computed(()=>props.locked||ownBusy.value),writeLocked=computed(()=>locked.value||!!pending.value);
@@ -16,20 +16,28 @@ const hospitalOptions=computed(()=>[{id:'',name:'全部可查看医院'},...stat
 const picked=(e:unknown)=>Number((e as {detail:{value:string}}).detail.value),date=(e:unknown)=>(e as {detail:{value:string}}).detail.value;
 const label=(options:string[][],value:string)=>options.find(s=>s[0]===value)?.[1]||options[0][1];
 watch(ownBusy,value=>emit('busy-changed',value),{flush:'sync',immediate:true});watch(()=>state.review,()=>{ack.value=false;});
+const entryDirty=computed(()=>hasEntry()||!!state.review);
+watch(entryDirty,value=>emit('dirty-changed',value),{flush:'sync',immediate:true});
+function canLeave(){return !ownBusy.value&&!entryDirty.value&&!pending.value;}
+function abandon(){if(writeLocked.value)return;controller.cancelCorrection();}
+function retainEntry(){if(!entryDirty.value)return false;state.writeError='有未提交回款，请先完成登记或选择放弃并清空未提交回款。';return true;}
+function paused(value:unknown){return (value as {paused?:boolean})?.paused===true;}
+function hasEntry(){return !!(state.form.amount||state.form.paidDate||state.form.remark||state.form.correctsPaymentRecordId||state.voidPaymentId);}
+function manageFinance(){if(locked.value||!!pending.value||!ar.value||state.review)return;if(hasEntry()){state.writeError='已有未提交回款内容，请先完成登记或清空后再查看账期与异常。';return;}emit('manage-finance',{orderId:ar.value.orderId,receivableId:ar.value.id});}
 function originalReference(id:string){return paymentReference(state.detail?.payments.find(p=>p.id===id));}
 function guard(work:()=>void){try{state.writeError='';work();}catch(e){state.writeError=(e as Error).message;}}
 function setDate(e:unknown){state.form.paidDate=date(e);controller.invalidateReview();}
 async function query(){if(locked.value)return;await controller.query({...filters} as ReceivableFilters);}
 async function reset(){if(locked.value)return;Object.assign(filters,receivableFilterForm(createReceivablesState().applied));await query();}
 async function open(id:string){if(locked.value)return;await controller.open(id);}
-async function back(){if(locked.value)return;restoreFilters(filters,state.applied);await controller.back();}
+async function back(){if(locked.value||retainEntry())return;restoreFilters(filters,state.applied);await controller.back();}
 async function move(n:number){if(locked.value)return;restoreFilters(filters,state.applied);await controller.move(n);}
-async function refresh(){if(locked.value)return;if(state.mode==='detail')await controller.open(state.selectedId);else{restoreFilters(filters,state.applied);await controller.back();}}
+async function refresh(){if(locked.value||retainEntry())return;if(state.mode==='detail')await controller.open(state.selectedId);else{restoreFilters(filters,state.applied);await controller.back();}}
 // Recovery is called after the parent's operation lock has been released. Epochs also cancel any initial list read.
 async function openAfterRecovery(id:string){await controller.open(id);if(state.detail)state.notice='原回款操作已确认提交，余额已重新读取。';}
 async function commit(){if(writeLocked.value||!ack.value)return;try{await controller.commit();}catch{/* shared error is visible; pending retains original request */}}
-defineExpose({refresh,openAfterRecovery});
-onMounted(()=>Promise.all([controller.hospitals(),controller.query(state.applied)]));onBeforeUnmount(()=>{controller.dispose();emit('busy-changed',false);});
+defineExpose({refresh,openAfterRecovery,canLeave});
+onMounted(()=>Promise.all([controller.hospitals(),controller.query(state.applied)]));onBeforeUnmount(()=>{controller.dispose();emit('busy-changed',false);emit('dirty-changed',false);});
 </script>
 <template>
  <view class="receivables">
@@ -42,14 +50,14 @@ onMounted(()=>Promise.all([controller.hospitals(),controller.query(state.applied
    </view><view class="actions"><button class="primary" :disabled="locked" @click="query">查询</button><button :disabled="locked" @click="reset">重置</button></view>
    <view v-if="dirty" class="notice">筛选已修改，点击查询后生效；当前仍显示已查询条件。</view><view v-if="state.hospitalsError" class="error">医院筛选读取失败：{{state.hospitalsError}}<button :disabled="locked" class="text-button" @click="controller.hospitals()">重试</button></view><view v-if="state.listError" class="error">查询失败：{{state.listError}}<button :disabled="locked" class="text-button" @click="back">重新查询</button></view><text v-if="state.listLoading" class="empty">正在读取回款台账…</text>
    <template v-if="state.page&&!state.listLoading"><view class="results"><text>共 {{state.page.total}} 单应收</text><text class="tiny">金额单位：元 · 到期日顺序</text></view>
-    <button v-for="item in state.page.items" :key="item.id" class="order-row" :disabled="locked" @click="open(item.id)"><view class="row-heading"><text class="hospital">{{item.hospitalName}}</text><text class="tiny">{{accountState(item)}} ›</text></view><text class="subtle small">{{item.orderNo}} · 接收 {{item.receivedDate}}</text><view class="row-facts"><view><text class="tiny">应收</text><text>{{item.amount}}</text></view><view><text class="tiny">有效已收</text><text>{{item.paid}}</text></view><view><text class="tiny">未收余额</text><text class="amount">{{item.balance}}</text></view></view><text class="subtle small">{{item.paymentState==='settled'?'':paymentStateLabel(item)+' · '}}到期 {{item.dueDate}}</text><text class="subtle small">{{item.owner.name}} · {{item.writable?'订单负责销售':'只读查阅'}}</text></button><text v-if="!state.page.items.length" class="empty">没有符合当前筛选的应收。</text>
+    <button v-for="item in state.page.items" :key="item.id" class="order-row" :disabled="locked" @click="open(item.id)"><view class="row-heading"><text class="hospital">{{item.hospitalName}}</text><text class="tiny">{{accountState(item)}} ›</text></view><text class="subtle small">{{item.orderNo}} · 接收 {{item.receivedDate}}</text><view class="row-facts"><view><text class="tiny">应收</text><text>{{item.amount}}</text></view><view><text class="tiny">有效已收</text><text>{{item.paid}}</text></view><view><text class="tiny">未收余额</text><text class="amount">{{item.balance}}</text></view></view><text class="subtle small">{{item.paymentState==='settled'?'':paymentStateLabel(item)+' · '}}到期 {{item.dueDate}}</text><text v-if="paused(item)" class="subtle small">异常暂停催收 · 原金额与到期日保留</text><text class="subtle small">{{item.owner.name}} · {{item.writable?'订单负责销售':'只读查阅'}}</text></button><text v-if="!state.page.items.length" class="empty">没有符合当前筛选的应收。</text>
     <view class="pagination"><button :disabled="locked||state.page.page<=1" @click="move(state.page!.page-1)">上一页</button><text>第 {{state.page.page}} / {{pages}} 页</text><button :disabled="locked||state.page.page>=pages" @click="move(state.page!.page+1)">下一页</button></view><text class="tiny">读取于 {{beijingTime(state.page.asOf)}}</text>
    </template><text class="footnote">全缺货不产生应收；尚未医院确认及未核实的历史补录不进入台账。</text>
   </template>
   <template v-else>
    <view class="actions"><button :disabled="locked" @click="back">← 返回原筛选</button><button :disabled="locked" @click="refresh">载入最新余额</button></view><text v-if="state.detailLoading" class="empty">正在读取应收和回款记录…</text><view v-if="state.detailError" class="error">详情读取失败：{{state.detailError}}</view><view v-if="state.notice" class="notice">{{state.notice}}</view><view v-if="state.writeError" class="error">{{state.writeError}}</view>
    <template v-if="ar&&state.detail"><text class="eyebrow detail-number">{{ar.orderNo}}</text><text class="title">{{ar.hospitalName}}</text><text class="subtle small">{{accountState(ar)}} · 负责人 {{ar.owner.name}}</text><view class="account-facts"><view><text class="tiny">应收 / 元</text><text>{{ar.amount}}</text></view><view><text class="tiny">有效已收 / 元</text><text>{{ar.paid}}</text></view><view><text class="tiny">未收余额 / 元</text><text class="amount">{{ar.balance}}</text></view></view><text class="subtle small">实际接收 {{ar.receivedDate}} · 账期 {{ar.paymentTermDays}} 天</text><text class="subtle small">到期日 {{ar.dueDate}} · 部分回款不重置到期日</text>
-    <view v-if="!ar.writable" class="notice">本单只读，回款及误录作废由订单负责销售员处理。</view>
+    <view class="actions"><button :disabled="locked||!!pending||!!state.review" @click="manageFinance">查看账期 / 异常 →</button><button v-if="hasEntry()" :disabled="writeLocked||!!state.review" @click="abandon">放弃并清空未提交回款</button></view><view v-if="paused(ar)" class="notice">异常暂停催收；原金额与到期日保留，不表示结清或退款完成。</view><view v-if="!ar.writable" class="notice">本单只读，回款及误录作废由订单负责销售员处理。</view>
     <view v-if="ar.writable" class="entry"><text class="section-title">{{state.form.correctsPaymentRecordId?'关联作废记录重录':'登记本次回款'}}</text><text class="subtle small">仅登记此订单实际收到的一笔款。</text><view v-if="corrected" class="notice">原记录 {{paymentReference(corrected)}}<button class="text-button" :disabled="writeLocked" @click="controller.cancelCorrection()">取消关联</button></view><view v-if="ar.paymentState==='settled'" class="notice">本单已结清，不能追加正数回款；误录仍可选择有效记录作废。</view>
      <label class="field"><text>实际回款金额 / 元</text><input v-model="state.form.amount" type="digit" :disabled="formLocked" placeholder="如 1000.00" @input="controller.invalidateReview()" /></label><label v-if="!(corrected?.recordType==='historical_opening'&&corrected.paidDate===null)" class="field"><text>实际回款日期</text><picker mode="date" :value="state.form.paidDate||''" :end="beijingToday()" :disabled="formLocked" @change="setDate"><view class="select">{{state.form.paidDate||'请选择实际回款日期'}} ⌄</view></picker></label><text v-else class="subtle small">原历史累计回款日期未知，本次更正继续保留未知。</text><label class="field"><text>备注（可选）</text><textarea v-model="state.form.remark" maxlength="500" :disabled="formLocked" @input="controller.invalidateReview()" /></label><text class="tiny">实际日期与录入日期分别保存，不以今天代替实际日期。</text><button class="primary full" :disabled="formLocked" @click="guard(()=>controller.reviewPayment())">复核本次回款</button>
     </view>

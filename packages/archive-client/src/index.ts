@@ -1,4 +1,4 @@
-import type {ArchiveDetail,ArchiveFilters,ArchiveHospital,ArchiveOrder,ArchivePage,PriceHistory,QuoteDocument} from '@quote/contracts';
+import type {ArchiveDetail,ArchiveFilters,ArchiveHospital,ArchiveOrder,ArchivePage,PriceHistory,PriceHistoryMatch,QuoteDocument} from '@quote/contracts';
 export type ReadRequest=<T>(path:string)=>Promise<T>;
 export interface ArchiveFilterForm {hospitalId:string;receivedFrom:string;receivedTo:string;keyword:string;status:string;ownership:string;payment:string;pageSize:number;}
 export function archiveFilterForm(filters:ArchiveFilters={}):ArchiveFilterForm{return {hospitalId:filters.hospitalId||'',receivedFrom:filters.receivedFrom||'',receivedTo:filters.receivedTo||'',keyword:filters.keyword||'',status:filters.status||'',ownership:filters.ownership||'',payment:filters.payment||'',pageSize:filters.pageSize||20};}
@@ -32,8 +32,9 @@ export function beijingTime(value:string|null|undefined){if(!value)return '—';
 export const orderStatuses=[['draft','采购草稿'],['frozen','厂家询价'],['quote_draft','计价草稿'],['quote_exported','已导出报价'],['quote_sent','已发送报价'],['completed','已完成'],['voided','已作废']] as const;
 export function orderStatus(value:string){return orderStatuses.find(s=>s[0]===value)?.[1]||value;}
 export const paymentFilters=[['','全部回款情况'],['none','尚无应收 / 不适用'],['outstanding','有未收余额'],['due','今日到期'],['overdue','逾期未收'],['settled','已结清']] as const;
-export interface HistoryContext {hospitalId:string;name:string;spec:string;orderId:string;}
-export function priceHistoryQuery(c:HistoryContext){return '/sales/price-history?'+encodedQuery({hospitalId:c.hospitalId,name:c.name,spec:c.spec||'',unit:'kg',excludeOrderId:c.orderId},true);}
+export interface HistoryContext {hospitalId:string;name:string;spec:string;orderId:string;itemId?:string|null;itemVariantId?:string|null;}
+export function priceHistoryQuery(c:HistoryContext){return '/sales/price-history?'+encodedQuery({hospitalId:c.hospitalId,name:c.name,spec:c.spec||'',unit:'kg',excludeOrderId:c.orderId,itemId:c.itemId||undefined,itemVariantId:c.itemVariantId||undefined},true);}
+export function historyMatchLabel(match:PriceHistoryMatch|undefined){return ({variant_exact:'同商品规格 · kg',item_spec_exact:'同标准商品及规格文本 · kg',item_fallback:'同标准商品 · 降级参考',text_exact:'品名及规格文本匹配 · kg'})[match||'text_exact'];}
 export interface HistoryState {context:HistoryContext|null;history:PriceHistory|null;loading:boolean;error:string;}
 export function createHistoryState():HistoryState{return {context:null,history:null,loading:false,error:''};}
 export class HistoryController {

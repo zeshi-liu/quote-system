@@ -37,6 +37,41 @@ test('角色升降并改回原角色，中间未发请求，旧Bearer和CoreStor
  await assert.rejects(()=>db.transaction(c=>new CoreStore(db,()=>now).active(c,actor)),(e:any)=>e.status===401);
 });
 test('开发配置允许PC默认5176来源，生产只接受显式可信HTTPS来源',()=>{const keys=['NODE_ENV','DATABASE_URL','SUPPLIER_WEB_URL','ALLOWED_ORIGINS','TRIAL_PASSWORD_LOGIN','DEV_PGLITE'],saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]));try{for(const key of keys)delete process.env[key];process.env.DATABASE_URL='postgresql://fixture@127.0.0.1/fixture';assert.ok(configuration().allowedOrigins.includes(origin));assert.ok(configuration().allowedOrigins.includes('http://localhost:5176'));process.env.NODE_ENV='production';process.env.SUPPLIER_WEB_URL='https://supplier.example';assert.throws(()=>configuration(),/ALLOWED_ORIGINS/);process.env.ALLOWED_ORIGINS=origin;assert.throws(()=>configuration(),/HTTPS/);process.env.ALLOWED_ORIGINS='https://quote.example';assert.deepEqual(configuration().allowedOrigins,['https://quote.example']);}finally{for(const key of keys)if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}});
+async function proxyApp(trustedProxyIps:string[]|undefined,run:(url:string)=>Promise<void>){
+ const instance=await createApp({databaseUrl:'',supplierWebUrl:'',trialPasswordLogin:false,production:false,wechatAppId:'',wechatAppSecret:'',allowedOrigins:[origin],trustedProxyIps},db,()=>now,{storage});
+ try{await instance.listen(0,'127.0.0.1');await run((await instance.getUrl())+'/api/v1');}finally{await instance.close();}
+}
+test('可信代理配置默认关闭，仅允许明确IP且拒绝通配、CIDR、别名与跳数',()=>{
+ const keys=['NODE_ENV','DATABASE_URL','TRUSTED_PROXY_IPS'],saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+ try{delete process.env.NODE_ENV;process.env.DATABASE_URL='postgresql://fixture@127.0.0.1/fixture';delete process.env.TRUSTED_PROXY_IPS;assert.deepEqual(configuration().trustedProxyIps,[]);
+  process.env.TRUSTED_PROXY_IPS='172.30.90.2, ::1';assert.deepEqual(configuration().trustedProxyIps,['172.30.90.2','::1']);
+  for(const invalid of ['true','1','loopback','0.0.0.0/0','172.16.0.0/12','proxy.example','0.0.0.0','::']){process.env.TRUSTED_PROXY_IPS=invalid;assert.throws(()=>configuration(),/TRUSTED_PROXY_IPS/,invalid);}
+ }finally{for(const key of keys)if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}
+});
+test('默认及非可信直连忽略伪造XFF，轮换来源头不能绕过微信限流',async()=>{
+ for(const trusted of [undefined,['192.0.2.50']])await proxyApp(trusted,async url=>{
+  for(let n=0;n<15;n++)assert.equal((await wire('/auth/miniapp/login','POST',{loginCode:'offline-only'},undefined,{'X-Forwarded-For':'198.51.100.'+(n+1)},url)).status,503);
+  const limited=await wire('/auth/miniapp/login','POST',{loginCode:'offline-only'},undefined,{'X-Forwarded-For':'203.0.113.200'},url);assert.equal(limited.status,429);assert.equal(limited.error.code,'RATE_LIMITED');
+ });
+});
+test('可信代理仅接受覆盖后的单IP，微信限流按客户隔离且拒绝多跳伪造',async()=>{
+ await proxyApp(['127.0.0.1'],async url=>{
+  for(const forwarded of ['203.0.113.5, 198.51.100.10','invalid','198.51.100.10:1234']){const invalid=await wire('/auth/miniapp/login','POST',{loginCode:'offline-only'},undefined,{'X-Forwarded-For':forwarded},url);assert.equal(invalid.status,400);assert.equal(invalid.error.code,'INVALID_FORWARDED_FOR');}
+  for(let n=0;n<15;n++)assert.equal((await wire('/auth/miniapp/login','POST',{loginCode:'offline-only'},undefined,{'X-Forwarded-For':'198.51.100.10'},url)).status,503);
+  assert.equal((await wire('/auth/miniapp/login','POST',{loginCode:'offline-only'},undefined,{'X-Forwarded-For':'198.51.100.10'},url)).status,429);
+  for(const client of ['198.51.100.11','2001:db8::1'])assert.equal((await wire('/auth/miniapp/login','POST',{loginCode:'offline-only'},undefined,{'X-Forwarded-For':client},url)).status,503);
+ });
+});
+test('可信代理下同一销售账号的不同客户登录限流相互隔离',async()=>{
+ await proxyApp(['::ffff:127.0.0.1'],async url=>{
+  const u=await user(),a=browser(),b=browser(),first={'X-Forwarded-For':'198.51.100.10'},second={'X-Forwarded-For':'198.51.100.11'};
+  b.csrf=(await ok('/auth/csrf','GET',undefined,b,second,url)).csrf;
+  for(let n=0;n<15;n++){a.csrf=(await ok('/auth/csrf','GET',undefined,a,first,url)).csrf;const denied=await wire('/auth/pc/password-login','POST',{loginName:u.name,password:'incorrect-fixture-only'},a,first,url);assert.equal(denied.status,401,JSON.stringify(denied));}
+  a.csrf=(await ok('/auth/csrf','GET',undefined,a,first,url)).csrf;
+  assert.equal((await wire('/auth/pc/password-login','POST',{loginName:u.name,password},a,first,url)).status,429);
+  assert.equal((await wire('/auth/pc/password-login','POST',{loginName:u.name,password},b,second,url)).status,200);
+ });
+});
 test('PC登录必须先取得预会话CSRF并验证可信Origin，不能用SameSite或Host替代',async()=>{
  const u=await user(),body={loginName:u.name,password};assert.equal((await wire('/auth/pc/password-login','POST',body)).status,403);
  const b=browser();b.csrf=(await ok('/auth/csrf','GET',undefined,b)).csrf;assert.ok(b.csrf);assert.equal((await wire('/auth/pc/password-login','POST',body,b,{Origin:'https://evil.example'})).status,403);assert.equal((await wire('/auth/pc/password-login','POST',body,b,{'X-CSRF-Token':'wrong'})).status,403);assert.equal((await wire('/auth/pc/password-login','POST',body,b,{Origin:''})).status,403);

@@ -15,7 +15,7 @@ export const internalRole=(role:string,channel:string)=>role==='salesperson'&&['
 export class AuthService {
  private readonly dummyHash=passwordHash(newSecret());
  private readonly attempts=new Map<string,{count:number;expires:number}>();
- constructor(readonly db:Database,readonly config:Config,readonly clock=()=>new Date()){}
+ constructor(readonly db:Database,readonly config:Config,readonly clock=()=>new Date(),readonly options:{fetch?:typeof fetch}={}){}
  private limit(key:string) {
    const now=this.clock().getTime(),old=this.attempts.get(key);
    if(!old||old.expires<now){if(this.attempts.size>=5000)this.attempts.delete(this.attempts.keys().next().value!);this.attempts.set(key,{count:1,expires:now+600000});return;}
@@ -27,9 +27,11 @@ export class AuthService {
    const user=(await this.db.query('SELECT * FROM users WHERE login_name=$1',[v.loginName])).rows[0];
    const valid=await verify(user?.password_hash||await this.dummyHash,v.password);
    ensure(valid&&user?.active&&(user.role==='salesperson'||pc&&user.role==='admin'),401,'INVALID_CREDENTIALS','账号或密码错误，或账号不可用');
+   ensure(!user.password_setup_required,428,'PASSWORD_SETUP_REQUIRED','请先使用临时凭证设置本人新密码，再登录或绑定微信。');
    return user;
  }
  private async issue(c:PoolClient,user:any,channel:Session['channel'],csrfHash:string|null=null):Promise<Session> {
+   ensure(!user.password_setup_required,428,'PASSWORD_SETUP_REQUIRED','请先完成本人密码设置。');
    const token=newSecret(),now=this.clock(),expires=new Date(now.getTime()+(channel==='mini'?30:channel==='pc'?7:1)*86400000);
    await c.query('INSERT INTO auth_sessions(user_id,token_hash,channel,expires_at,last_seen_at,csrf_hash) VALUES($1,$2,$3,$4,$5,$6)',[user.id,secretHash(token),channel,expires,now,csrfHash]);
    return {authState:'authenticated',token,user:{id:user.id,name:user.name,role:user.role},expiresAt:expires.toISOString(),channel};
@@ -49,12 +51,13 @@ export class AuthService {
    let result:any;
    try {
      const query=new URLSearchParams({appid:this.config.wechatAppId,secret:this.config.wechatAppSecret,js_code:loginCode,grant_type:'authorization_code'});
-     const response=await fetch('https://api.weixin.qq.com/sns/jscode2session?'+query,{signal:AbortSignal.timeout(8000)});
-     result=await response.json();
+     const response=await (this.options.fetch||fetch)('https://api.weixin.qq.com/sns/jscode2session?'+query,{signal:AbortSignal.timeout(8000)});
+     ensure(response.ok,503,'WECHAT_UNAVAILABLE','微信登录暂不可用，请稍后重试');result=await response.json();
    } catch {throw new BusinessError(503,'WECHAT_UNAVAILABLE','微信登录暂不可用，请稍后重试');}
    ensure(typeof result.openid==='string'&&!result.errcode,401,'WECHAT_LOGIN_FAILED','微信登录凭证无效，请重新登录');
    return this.db.transaction(async c=>{
      const user=(await c.query('SELECT u.* FROM wechat_identities w JOIN users u ON u.id=w.user_id WHERE w.app_id=$1 AND w.open_id=$2 FOR SHARE OF u',[this.config.wechatAppId,result.openid])).rows[0];
+     if(user?.role==='hospital')return this.hospitalSession(c,user);
      if(user){ensure(user.active&&user.role==='salesperson',403,'ACCOUNT_UNAVAILABLE','账号不可用或不属于销售端');return this.issue(c,user,'mini');}
      const bindTicket=newSecret();await c.query('INSERT INTO bind_tickets(token_hash,app_id,open_id,expires_at) VALUES($1,$2,$3,$4)',[secretHash(bindTicket),this.config.wechatAppId,result.openid,new Date(this.clock().getTime()+600000)]);
      return {authState:'identity_unbound',bindTicket};
@@ -74,13 +77,18 @@ export class AuthService {
      await c.query('UPDATE bind_tickets SET used_at=$2 WHERE token_hash=$1',[secretHash(value.bindTicket),this.clock()]);return this.issue(c,latest,'mini');
    });
  }
- async authenticate(token:string,transport:'bearer'|'pc'='bearer'):Promise<Actor> {
+ async hospitalSession(c:PoolClient,user:any):Promise<Session>{
+   const p=(await c.query('SELECT p.active AS purchaser_active,h.active AS hospital_active FROM hospital_purchasers p JOIN hospitals h ON h.id=p.hospital_id WHERE p.user_id=$1 FOR SHARE OF p,h',[user.id])).rows[0];
+   ensure(user.active&&user.role==='hospital'&&!user.password_setup_required&&p?.purchaser_active&&p.hospital_active,403,'HOSPITAL_ACCOUNT_UNAVAILABLE','医院或采购员档案不可用，请联系管理员');return this.issue(c,user,'mini');
+ }
+ async authenticate(token:string,transport:'bearer'|'pc'='bearer',allowHospital=false):Promise<Actor> {
    ensure(token&&token.length<=256,401,'UNAUTHENTICATED','请先登录');
    const r=(await this.db.query('SELECT s.id AS session_id,s.channel,s.expires_at,s.last_seen_at,s.revoked_at,s.issued_role,s.auth_version AS session_auth_version,u.* FROM auth_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1',[secretHash(token)])).rows[0];
    const now=this.clock(),idle=sessionIdleMs(r?.channel);
-   ensure(r&&r.active&&!r.revoked_at&&r.expires_at>now&&now.getTime()-r.last_seen_at.getTime()<idle&&r.issued_role===r.role&&r.session_auth_version===r.auth_version,401,'SESSION_EXPIRED','登录已失效，请重新登录');
+   ensure(r&&r.active&&!r.password_setup_required&&!r.revoked_at&&r.expires_at>now&&now.getTime()-r.last_seen_at.getTime()<idle&&r.issued_role===r.role&&r.session_auth_version===r.auth_version,401,'SESSION_EXPIRED','登录已失效，请重新登录');
    ensure(transport==='pc'?r.channel==='pc':r.channel!=='pc',403,'CHANNEL_FORBIDDEN','会话传递通道不匹配，请重新登录');
-   ensure(internalRole(r.role,r.channel),403,'ROLE_FORBIDDEN','当前角色不能使用此内部端');
+   if(allowHospital&&r.role==='hospital'&&r.channel==='mini'&&transport==='bearer'){const p=(await this.db.query('SELECT p.active AS purchaser_active,h.active AS hospital_active FROM hospital_purchasers p JOIN hospitals h ON h.id=p.hospital_id WHERE p.user_id=$1',[r.id])).rows[0];ensure(p?.purchaser_active&&p.hospital_active,403,'HOSPITAL_ACCOUNT_UNAVAILABLE','医院或采购员档案不可用，请联系管理员');}
+   else ensure(internalRole(r.role,r.channel),403,'ROLE_FORBIDDEN','当前角色不能使用此内部端');
    await this.db.query('UPDATE auth_sessions SET last_seen_at=$2 WHERE id=$1 AND revoked_at IS NULL',[r.session_id,now]);
    return {id:r.id,name:r.name,role:r.issued_role,sessionId:r.session_id,channel:r.channel};
  }

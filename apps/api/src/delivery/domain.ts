@@ -5,13 +5,15 @@ import { draftView } from '../core/read-model';
 import { ensure } from '../core/errors';
 import { today } from '../core/validation';
 import { decimal } from '../core/money';
+import {selectQuoteTemplate} from './template';
 export interface BasisEvidence {lines:{purchaseLineId:string;kind:string;sourceIds:string[];basePrice:string|null;lossReason:string;finalConfirmed:boolean}[];requiresLossAcknowledgement:boolean;}
 export async function snapshot(c:Client,r:any,v:any,now:Date):Promise<{document:QuoteDocument;evidence:BasisEvidence;hash:string;ready:boolean}>{
  if(v.document)return {document:v.document,evidence:v.basis_evidence,hash:v.snapshot_hash,ready:!!v.first_exported_at};
  const d=await draftView(c,{...r,revision_id:v.revision_id},now,v.id),seller=(await c.query('SELECT name FROM users WHERE id=$1',[r.sales_user_id])).rows[0];
  const rows=(await c.query('SELECT * FROM quote_lines WHERE version_id=$1',[v.id])).rows;
  const evidence:BasisEvidence={lines:rows.map(l=>({purchaseLineId:l.purchase_line_id,kind:l.adopted_kind,sourceIds:l.adopted_kind==='priced'?[l.base_supplier_quote_line_id].filter(Boolean):(l.adopted_supplier_snapshot||[]).filter((x:any)=>x.state==='unavailable').map((x:any)=>x.supplierQuoteLineId),basePrice:l.base_price,lossReason:l.loss_reason,finalConfirmed:l.final_confirmed})),requiresLossAcknowledgement:d.lines.some(l=>l.kind==='priced'&&l.finalPrice&&l.basePrice&&decimal(l.finalPrice).lt(decimal(l.basePrice)))};
- const document:QuoteDocument={schemaVersion:1,quoteNo:r.quote_no,versionNo:v.version_no,hospitalName:r.hospital_name,sellerName:process.env.QUOTE_SELLER_NAME||'演示供应商（虚构）',quoteDate:today(now),salespersonName:seller.name,contact:process.env.QUOTE_CONTACT||'演示联系方式（虚构）',validUntil:d.hospitalValidUntil,taxNote:'以上报价均为含税价格',notes:process.env.QUOTE_NOTES||'',lines:d.lines.map((l,i)=>({position:i+1,remark:l.publicRemark||'',name:l.name,spec:l.spec,unit:'kg',quantity:l.quantity,status:l.kind==='missing'?'missing':'priced',unitPrice:l.kind==='priced'?l.finalPrice:null,amount:l.amount})),total:d.total};
+ const template=await selectQuoteTemplate(c);
+ const document:QuoteDocument={schemaVersion:1,quoteNo:r.quote_no,versionNo:v.version_no,hospitalName:r.hospital_name,sellerName:process.env.QUOTE_SELLER_NAME||'演示供应商（虚构）',quoteDate:today(now),salespersonName:seller.name,contact:process.env.QUOTE_CONTACT||'演示联系方式（虚构）',validUntil:d.hospitalValidUntil,taxNote:'以上报价均为含税价格',notes:process.env.QUOTE_NOTES||'',lines:d.lines.map((l,i)=>({position:i+1,remark:l.publicRemark||'',name:l.name,spec:l.spec,unit:'kg',quantity:l.quantity,status:l.kind==='missing'?'missing':'priced',unitPrice:l.kind==='priced'?l.finalPrice:null,amount:l.amount})),total:d.total,...(template||{})};
  return {document,evidence,hash:createHash('sha256').update(stable({document,evidence})).digest('hex'),ready:d.readyForNextStep};
 }
 export async function assertUsable(c:Client,r:any,v:any,document:QuoteDocument,evidence:BasisEvidence,now:Date){
