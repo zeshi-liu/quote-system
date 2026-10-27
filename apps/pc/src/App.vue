@@ -3,20 +3,23 @@ import {computed,onMounted,onBeforeUnmount,reactive,ref,watch} from 'vue';
 import type {ArchiveFilters,ArchiveOrder} from '@quote/contracts';
 import {ArchiveController,archiveFilterForm,isFiltersDirty,restoreAppliedFilters,archivePanels,archiveTabs,archiveGroups,beijingTime,canProcessOrder,confirmationAmount,createArchiveState,orderStatus,orderStatuses,paymentFilters,receivableLabel,type ArchiveTab} from '@quote/archive-client';
 import {PcApi,PcApiFailure,fetchDownload} from './api';
+import Receivables from './components/Receivables.vue';
+const view=ref<'archive'|'receivables'>('archive'),receivablesBusy=ref(false);
 const state=reactive(createArchiveState()),tab=ref<ArchiveTab>('source'),loginName=ref(''),password=ref(''),error=ref(''),booting=ref(true),working=ref(false);
 let controller:ArchiveController;
-const api=reactive(new PcApi(fetch,()=>{controller?.clear();tab.value='source';password.value='';}));
+const api=reactive(new PcApi(fetch,()=>{controller?.clear();tab.value='source';password.value='';view.value='archive';receivablesBusy.value=false;}));
 controller=new ArchiveController(path=>api.get(path),state);
 const blank=()=>archiveFilterForm();
 const filters=reactive(blank());
 const filtersDirty=computed(()=>isFiltersDirty(filters,state.applied));
-const busy=computed(()=>booting.value||working.value||state.listLoading||state.detailLoading||state.hospitalsLoading);
+const busy=computed(()=>booting.value||working.value||receivablesBusy.value||state.listLoading||state.detailLoading||state.hospitalsLoading);
 const pages=computed(()=>state.page?Math.max(1,Math.ceil(state.page.total/state.page.pageSize)):1);
 const activeGroup=computed(()=>archiveGroups.find(g=>g.sections.includes(tab.value))!);
 const panels=computed(()=>state.detail?archivePanels(state.detail)[tab.value]:[]);
 const files=computed(()=>state.detail?.quotes.flatMap(q=>q.files.map(f=>({...f,version:q.quoteNo+' · R'+q.revisionNo+' / V'+q.versionNo})))||[]);
 watch(()=>state.selectedId,()=>{tab.value='source';});
 function applied(){return {...filters} as ArchiveFilters;}
+async function showArchive(){if(busy.value)return;view.value='archive';if(state.mode==='detail'&&state.selectedId)await controller.open(state.selectedId);else await controller.back();}
 async function query(){if(busy.value)return;error.value='';await controller.query(applied());}
 async function reset(){if(busy.value)return;Object.assign(filters,blank());await query();}
 async function back(){if(busy.value)return;restoreAppliedFilters(filters,state.applied);await controller.back();}
@@ -32,7 +35,7 @@ onBeforeUnmount(()=>controller.dispose());
 </script>
 <template>
  <div class="pc-app">
-  <header class="masthead"><a class="brand" href="./">饮片报价<span>历史订单</span></a><div v-if="api.user" class="identity"><span>{{api.user.name}} · {{api.user.role==='admin'?'管理员':'销售员'}}</span><button :disabled="busy" @click="logout">退出登录</button></div></header>
+  <header class="masthead"><a class="brand" href="./">饮片报价<span>{{view==='archive'?'历史订单':'回款台账'}}</span></a><div v-if="api.user" class="identity"><span>{{api.user.name}} · {{api.user.role==='admin'?'管理员':'销售员'}}</span><button :disabled="busy" @click="logout">退出登录</button></div></header>
   <main v-if="!api.user" class="login">
    <p class="eyebrow">内部业务档案</p><h1>登录</h1><p class="muted">使用内部账号查阅采购、报价与应收记录。</p>
    <p v-if="booting" role="status">正在核实登录状态…</p>
@@ -40,8 +43,11 @@ onBeforeUnmount(()=>controller.dispose());
    <p v-if="error" class="error" role="alert">{{error}}</p>
   </main>
   <main v-else class="workspace">
-   <p class="breadcrumb">{{api.user.role==='admin'?'管理员':'销售'}} / 历史订单<span>北京时间</span></p>
+   <nav class="main-navigation" aria-label="主导航"><button :class="{selected:view==='archive'}" :disabled="busy" @click="showArchive">历史订单</button><button :class="{selected:view==='receivables'}" :disabled="busy" @click="view='receivables'">回款台账</button></nav>
+   <p class="breadcrumb">{{api.user.role==='admin'?'管理员':'销售'}} / {{view==='archive'?'历史订单':'回款台账'}}<span>北京时间</span></p>
    <p v-if="error" class="error" role="alert">{{error}}</p>
+   <Receivables v-if="view==='receivables'" :key="api.user.id" :api="api" :user-id="api.user.id" :admin="api.user.role==='admin'" :locked="working||booting" @busy-changed="receivablesBusy=$event" />
+   <template v-if="view==='archive'">
    <template v-if="state.mode==='list'">
     <div class="heading"><div><p class="eyebrow">订单档案</p><h1>历史订单</h1><p class="muted">按采购单查找所有修订、报价版本和留痕。</p></div><span class="scope">{{api.user.role==='admin'?'全量业务 · 只读':'本人订单与当前负责医院历史 · 本页只读'}}</span></div>
     <form class="filters" @submit.prevent="query">
@@ -71,6 +77,7 @@ onBeforeUnmount(()=>controller.dispose());
      <section v-for="(panel,index) in panels" :key="tab+'-'+index" class="detail-panel"><h2>{{panel.title}}</h2><p v-if="panel.note" class="muted panel-note">{{panel.note}}</p><dl v-if="panel.facts" class="panel-facts"><div v-for="fact in panel.facts" :key="fact[0]"><dt>{{fact[0]}}</dt><dd>{{fact[1]}}</dd></div></dl><div class="table-scroll" v-if="panel.columns&&panel.rows?.length"><table><thead><tr><th v-for="column in panel.columns" :key="column">{{column}}</th></tr></thead><tbody><tr v-for="(row,i) in panel.rows" :key="i"><td v-for="(cell,j) in row" :key="j">{{cell}}</td></tr></tbody></table></div><details v-if="panel.references?.length" class="references"><summary>引用信息</summary><dl class="panel-facts"><div v-for="(reference,j) in panel.references" :key="j"><dt>{{reference[0]}}</dt><dd>{{reference[1]}}</dd></div></dl></details></section>
      <section v-if="tab==='files'&&files.length" class="detail-panel"><h2>下载已生成文件</h2><div v-for="file in files" :key="file.id" class="file-row"><div><strong>{{file.filename}}</strong><small>{{file.version}} · {{beijingTime(file.createdAt)}}</small></div><button :disabled="busy" @click="download(file)">{{working?'正在准备…':'下载 '+file.format.toUpperCase()}}</button></div></section>
     </template>
+   </template>
    </template>
   </main>
  </div>

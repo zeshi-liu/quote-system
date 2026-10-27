@@ -95,6 +95,9 @@ importers:
       '@quote/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@quote/receivables-client':
+        specifier: workspace:*
+        version: link:../../packages/receivables-client
       vue:
         specifier: 3.5.22
         version: 3.5.22(typescript@5.9.3)
@@ -126,6 +129,9 @@ importers:
       '@quote/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@quote/receivables-client':
+        specifier: workspace:*
+        version: link:../../packages/receivables-client
       vue:
         specifier: 3.5.22
         version: 3.5.22(typescript@5.9.3)
@@ -166,6 +172,12 @@ importers:
         version: link:../contracts
 
   packages/contracts: {}
+
+  packages/receivables-client:
+    dependencies:
+      '@quote/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
 packages:
 

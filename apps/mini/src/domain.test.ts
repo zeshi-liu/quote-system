@@ -59,3 +59,4 @@ test('recovered export acceptance asks to check file generation rather than clai
  assert.match(notice,/已受理/);assert.match(notice,/核对文件生成结果/);assert.doesNotMatch(notice,/成功/);
  assert.match(committedOperationNotice({...operation,path:'/sales/purchase-orders'}),/操作已成功/);
 });
+test('payment permission-hidden 404 retains original pending operation',async()=>{const {retainPending}=await import('./pending');assert.equal(retainPending(404,false),true);});
