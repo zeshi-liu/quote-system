@@ -46,3 +46,5 @@ export class SourceOperations<T=unknown>{
 }
 export function resolveSourceDownload(value:string,apiBase:string){const base=new URL(apiBase),url=new URL(value,base);if(url.origin!==base.origin||url.username||url.password||!url.pathname.startsWith(base.pathname.replace(/\/$/,'')+'/files/')||!/^\/files\/[^/]+\/content$/.test(url.pathname.slice(base.pathname.replace(/\/$/,'').length))||!url.searchParams.get('token'))throw new Error('下载地址与当前服务不一致，已停止下载。');return url.href;}
 export const defaultMapping=():SpreadsheetFieldMapping=>({headerRow:1,columns:{name:0,quantity:1,spec:2}});
+
+export {formatBeijingTimestamp} from './timestamp';

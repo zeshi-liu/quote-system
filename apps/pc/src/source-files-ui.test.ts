@@ -9,8 +9,8 @@ import {parse,compileScript} from 'vue/compiler-sfc';
 import type {ViteDevServer} from 'vite';
 
 type Node={tag:string;text:string;props:Record<string,any>;children:Node[];parent:Node|null};
-const node=(tag:string,text=''):Node=>({tag,text,props:{},children:[],parent:null});
-const renderer=createRenderer<Node,Node>({createElement:tag=>node(tag),createText:text=>node('#text',text),createComment:text=>node('#comment',text),setText:(n,t)=>{n.text=t;},setElementText:(n,t)=>{n.text=t;n.children=[];},parentNode:n=>n.parent,nextSibling:n=>{const c=n.parent?.children||[];return c[c.indexOf(n)+1]||null;},patchProp:(n,key,_old,value)=>{n.props[key]=value;},insert:(n,p,anchor)=>{if(n.parent){const old=n.parent.children;old.splice(old.indexOf(n),1);}n.parent=p;const i=anchor?p.children.indexOf(anchor):-1;i<0?p.children.push(n):p.children.splice(i,0,n);},remove:n=>{if(n.parent)n.parent.children.splice(n.parent.children.indexOf(n),1);}});
+const node=(tag:string,text=''):Node=>{const n={tag,text,props:{},children:[],parent:null,tagName:tag.toUpperCase(),value:'',checked:false,addEventListener(){}} as Node;Object.defineProperty(n,'options',{get:()=>n.children.filter(c=>c.tag==='option')});return n;};
+const renderer=createRenderer<Node,Node>({createElement:tag=>node(tag),createText:text=>node('#text',text),createComment:text=>node('#comment',text),setText:(n,t)=>{n.text=t;},setElementText:(n,t)=>{n.text=t;n.children=[];},parentNode:n=>n.parent,nextSibling:n=>{const c=n.parent?.children||[];return c[c.indexOf(n)+1]||null;},patchProp:(n,key,_old,value)=>{n.props[key]=value;if(['value','checked','type','multiple'].includes(key))(n as any)[key]=value;},insert:(n,p,anchor)=>{if(n.parent){const old=n.parent.children;old.splice(old.indexOf(n),1);}n.parent=p;const i=anchor?p.children.indexOf(anchor):-1;i<0?p.children.push(n):p.children.splice(i,0,n);},remove:n=>{if(n.parent)n.parent.children.splice(n.parent.children.indexOf(n),1);}});
 const all=(n:Node):Node[]=>[n,...n.children.flatMap(all)];
 const text=(n:Node):string=>n.tag==='#comment'?'':n.text+n.children.map(text).join('');
 const find=(n:Node,tag:string,label:string)=>{const found=all(n).find(v=>v.tag===tag&&text(v).includes(label));assert.ok(found,`missing ${tag} ${label}: ${text(n)}`);return found;};
@@ -20,7 +20,7 @@ const reference={kind:'purchase_revision',orderId:'a',revisionId:'ra'};
 const file=(ref=reference,type='png')=>({id:'f',reference:ref,fileName:'private.'+type,fileType:type,mimeType:type==='png'?'image/png':'text/csv',purpose:type==='png'?'purchase_image':'purchase_excel',byteSize:4,uploadedBy:'u',createdAt:'2026-10-26T00:00:00Z',parentFileId:null});
 const job={id:'j',fileId:'f',status:'succeeded',parserType:'spreadsheet',attempts:1,rawRows:[{rowNumber:1,cells:['名','量'],errors:[]}],confidence:null,applied:false};
 const originalFetch=globalThis.fetch;
-let servers:ViteDevServer[]=[],dirs:string[]=[],Pc:any,MiniH5:any,MiniNative:any,h5Api:any,nativeApi:any;
+let servers:ViteDevServer[]=[],dirs:string[]=[],Pc:any,MiniH5:any,MiniNative:any,PcHistory:any,MiniHistory:any,h5Api:any,nativeApi:any;
 const storage=new Map<string,any>();
 let requestHandler:(path:string,body:any,method:string)=>Promise<any>;
 let nativeDownload:any;
@@ -37,17 +37,19 @@ async function createClient(platform:'H5'|'MP-WEIXIN'){
  }}],optimizeDeps:{noDiscovery:true,include:[]},logLevel:'error',server:{middlewareMode:true,hmr:{server:createHttpServer()}},appType:'custom'});servers.push(vite);return vite;
 }
 test.before(async()=>{
+ (globalThis as any).window={addEventListener(){},removeEventListener(){}};
  (globalThis as any).uni=fakeUni;(globalThis as any).wx={getFileSystemManager:()=>({}),env:{USER_DATA_PATH:'/test'},shareFileMessage:(o:any)=>{presentations.push('share');o.success();}};
  (globalThis as any).localStorage={getItem:(k:string)=>storage.get(k)||null,setItem:(k:string,v:string)=>storage.set(k,v),removeItem:(k:string)=>storage.delete(k)};
  (globalThis as any).document={createElement:()=>({style:{},type:'',files:[] as File[],onchange:null as null|(()=>void),click(){if(this.type==='file'){this.files=[new File(['data'],'a.csv',{type:'text/csv'})];this.onchange?.();}else presentations.push('download');},remove(){}}),body:{appendChild(){}}};
  storage.set('quote-session',login());
  const h5=await createClient('H5'),native=await createClient('MP-WEIXIN');
  Pc=(await h5.ssrLoadModule('/apps/pc/src/components/SourceFiles.vue')).default;
+ PcHistory=(await h5.ssrLoadModule('/apps/pc/src/components/HistoricalOrders.vue')).default;MiniHistory=(await h5.ssrLoadModule('/apps/mini/src/components/HistoricalOrders.vue')).default;
  MiniH5=(await h5.ssrLoadModule('/apps/mini/src/components/SourceFiles.vue')).default;h5Api=await h5.ssrLoadModule('/apps/mini/src/api.ts');
  MiniNative=(await native.ssrLoadModule('/apps/mini/src/components/SourceFiles.vue')).default;nativeApi=await native.ssrLoadModule('/apps/mini/src/api.ts');
 });
 test.beforeEach(()=>{storage.clear();delete (globalThis as any).__sourceAssetWait;presentations.length=0;nativeDownload=undefined;h5Api.setSession(login());nativeApi.setSession(login());requestHandler=async (p,b)=>p==='/files/query'?{items:[file(b)]}:p.includes('download-url')?{url:'/api/v1/files/f/content?token=grant'}:assert.fail('Unexpected request '+p);});
-test.after(async()=>{globalThis.fetch=originalFetch;await Promise.all(servers.map(v=>v.close()));await Promise.all(dirs.map(d=>rm(d,{recursive:true,force:true})));for(const key of ['uni','wx','document','localStorage'])delete (globalThis as any)[key];});
+test.after(async()=>{globalThis.fetch=originalFetch;await Promise.all(servers.map(v=>v.close()));await Promise.all(dirs.map(d=>rm(d,{recursive:true,force:true})));for(const key of ['uni','wx','document','localStorage','window'])delete (globalThis as any)[key];});
 function mount(Component:any,extra:Record<string,any>={}){const props=reactive({reference:{...reference},userId:'u',...extra});const root=node('root'),failures:any[]=[];const app=renderer.createApp({render:()=>h(Component,{...props,onFailure:(e:any)=>failures.push(e)})});for(const tag of ['checkbox','scroll-view','picker'])app.component(tag,{setup(_p:any,{slots}:any){return ()=>h(tag,{},slots.default?.());}});app.mount(root);return {root,props,app,failures};}
 for(const platform of ['h5','native'] as const){for(const invalidation of ['identity','token','reference','unmount'] as const){test(`mini ${platform} does not present private file after pending download and ${invalidation}`,async()=>{
  const api=platform==='h5'?h5Api:nativeApi;const waiting=deferred<Blob>();globalThis.fetch=(async()=>({ok:true,blob:()=>waiting.promise})) as any;
@@ -87,3 +89,31 @@ for(const boundary of ['put','read'] as const){for(const invalidation of ['ident
  h5Api.setSession(invalidation==='identity'?login('other','other-token'):login('u','replacement-token'));if(invalidation==='identity')m.props.userId='other';await tick();gate.resolve();await uploading;await tick();assert.equal(writes.length,0,'no file write may use the replacement session');const saved=JSON.parse(storage.get('quote-source-pending-v1:u'));assert.equal(saved.userId,'u');assert.deepEqual(saved.reference,reference);assert.equal(storage.has('quote-source-pending-v1:other'),false);const oldKey=saved.key;m.app.unmount();
  delete (globalThis as any).__sourceAssetWait;h5Api.setSession(login());const restored=mount(MiniH5);try{await tick();await find(restored.root,'button','核对原操作').props.onClick();await tick();assert.equal(writes.length,0);await find(restored.root,'button','原请求重试').props.onClick();await tick();assert.equal(writes.length,1);assert.equal(writes[0].token,'token-u');assert.equal(writes[0].body.base64,'ZGF0YQ==');assert.deepEqual(writes[0].body.reference,reference);assert.equal(storage.has('quote-source-pending-v1:u'),false);assert.ok(oldKey);}finally{restored.app.unmount();}
  });}}
+
+
+for(const client of ['pc','mini-h5','mini-native'] as const){
+ for(const [createdAt,expected] of [
+  ['2026-10-26T16:41:00Z','2026-10-27 00:41:00 北京时间'],
+  ['not-a-time','时间未知'],
+  [null,'时间未知'],
+  [undefined,'时间未知']
+ ] as const){test(`${client} original file timestamp ${String(createdAt)} uses Beijing time without changing source data`,async()=>{
+  const original=Object.freeze({...file(),createdAt}),before=JSON.stringify(original),calls:string[]=[];
+  const handler=async(path:string)=>{calls.push(path);assert.equal(path,'/files/query');return {items:[original]};};requestHandler=handler;
+  const m=mount(client==='pc'?Pc:client==='mini-h5'?MiniH5:MiniNative,client==='pc'?{api:{get:handler,post:handler}}:{});
+  try{await tick();assert.ok(text(m.root).includes(expected),text(m.root));assert.equal(JSON.stringify(original),before);assert.deepEqual(calls,['/files/query']);assert.deepEqual(m.failures,[]);}finally{m.app.unmount();}
+ });}
+}
+
+const historicalRecord=(createdAt:unknown,verifiedAt:unknown)=>({orderId:'history-a',recordId:'record-a',orderNo:'LS-1',hospitalId:'hospital-a',hospitalName:'虚构历史医院',entryMode:'historical_backfill',orderStatus:'draft',verificationStatus:'verified',version:1,writable:true,ownerId:'u',originalOwnerId:'u',createdBy:'u',createdAt,purchaserUserId:null,originalOrderNo:'',originalHandler:'',receivedDate:'2026-10-01',originalTermDays:0,effectiveTermDays:0,confirmedDate:'2026-10-02',finalAmount:'120.00',openingPaidAmount:'20.00',verificationBasis:'账本',verificationNote:'已核对',evidenceFileIds:[],verifiedBy:'u',verifiedAt,verifiedRevisionId:null,originalVerifiedAmount:'130.00',lines:[{name:'黄芪',spec:'',quantity:'2',unit:'kg',supplyStatus:'unknown',confirmedQuantity:null,unitPrice:'30',missingQuantity:null}],receivable:{id:'ar-history',amount:'120.00',paid:'20.00',balance:'100.00',dueDate:'2026-10-01'},corrections:[{id:'correction',beforeAmount:'130.00',afterAmount:'120.00',originalVerifiedAmount:'130.00',paidAtCorrection:'20.00',reason:'虚构更正说明',verificationBasis:'账本',verificationNote:'逐项核对',recordedByName:'u',recordedAt:createdAt==='invalid'?'invalid':'2026-10-26T16:44:03Z',evidenceFileIds:[]}]});
+for(const client of ['pc','mini'] as const){
+ for(const unknown of [false,true]){test(`${client} historical timestamps ${unknown?'unknown':'cross-midnight'} keep business dates and original data`,async()=>{
+  const original=Object.freeze(historicalRecord(unknown?'invalid':'2026-10-26T16:41:00Z',unknown?null:'2026-10-26T16:42:01Z')),before=JSON.stringify(original),calls:string[]=[];
+  const handler=async(path:string)=>{calls.push(path);if(path==='/sales/bootstrap')return {hospitals:[{id:'hospital-a',name:'虚构历史医院'}]};if(path==='/sales/historical-orders'||path.startsWith('/sales/historical-orders?'))return {items:[original],total:1,page:1,pageSize:20,asOf:unknown?'invalid':'2026-10-26T16:43:02Z'};if(path==='/sales/historical-orders/history-a')return original;if(path==='/files/query')return {items:[]};assert.fail(path);};requestHandler=handler;
+  const m=mount(client==='pc'?PcHistory:MiniHistory,{...(client==='pc'?{api:{get:handler,post:handler,write:()=>assert.fail('timestamp display must not write')},admin:false}:{}),initialOrderId:'history-a'});
+  try{await tick();await tick();assert.ok(text(m.root).includes(unknown?'补录时间 时间未知':'补录时间 2026-10-27 00:41:00 北京时间'),text(m.root));assert.ok(text(m.root).includes(unknown?'核实时间 时间未知':'核实时间 2026-10-27 00:42:01 北京时间'),text(m.root));
+   if(client==='pc'){for(const date of ['2026-10-01','2026-10-02'])assert.ok(all(m.root).some(n=>n.tag==='input'&&n.props.type==='date'&&n.props['onUpdate:modelValue']&&(n as any).value===date));}else{assert.ok(text(m.root).includes('2026-10-01'));assert.ok(text(m.root).includes('2026-10-02'));}
+   assert.ok(text(m.root).includes(unknown?'u · 时间未知 · 附件':'u · 2026-10-27 00:44:03 北京时间 · 附件'),text(m.root));assert.equal(JSON.stringify(original),before);assert.deepEqual(m.failures,[],JSON.stringify(calls));await find(m.root,'button',client==='pc'?'返回历史补录列表':'补录列表').props.onClick();await tick();assert.ok(text(m.root).includes(unknown?'数据截止 时间未知':'数据截止 2026-10-27 00:43:02 北京时间'),text(m.root));assert.ok(!text(m.root).includes(' UTC'));
+  }finally{m.app.unmount();}
+ });}
+}
